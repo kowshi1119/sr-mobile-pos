@@ -1,0 +1,62 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * { box-sizing: border-box; }
+  body { background: #0E0E0E; color: #E5E2E1; font-family: 'DM Sans', sans-serif; }
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: #131313; }
+  ::-webkit-scrollbar-thumb { background: #353534; border-radius: 2px; }
+  input, textarea, select { background: #1C1B1B !important; color: #E5E2E1 !important; }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-brand text-onbrand font-display font-bold px-5 py-2.5 rounded-lg hover:bg-brand-dark active:scale-95 transition-all duration-150 flex items-center gap-2;
+  }
+  .btn-ghost {
+    @apply bg-transparent border border-white/10 text-white/70 font-body px-4 py-2 rounded-lg hover:bg-white/5 hover:text-white active:scale-95 transition-all duration-150 flex items-center gap-2;
+  }
+  .card {
+    @apply bg-surface rounded-xl border border-white/5 shadow-lg;
+  }
+  .input {
+    @apply w-full bg-surface-low border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder:text-white/30 focus:outline-none focus:border-brand/60 focus:ring-1 focus:ring-brand/30 transition-all;
+  }
+  .label {
+    @apply text-xs font-display font-semibold uppercase tracking-widest text-white/40 mb-1 block;
+  }
+  .badge {
+    @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-mono font-medium;
+  }
+  .stat-card {
+    @apply card p-5 flex flex-col gap-1;
+  }
+  .nav-item {
+    @apply flex items-center gap-3 px-4 py-2.5 rounded-lg text-white/50 hover:text-white hover:bg-white/5 transition-all duration-150 font-body text-sm cursor-pointer;
+  }
+  .nav-item.active {
+    @apply bg-brand/10 text-brand border-l-2 border-brand;
+  }
+}
+
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  vertical-align: middle;
+  line-height: 1;
+}
+.fill-icon { font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+
+/* Status badge colours */
+.status-received    { @apply bg-blue-500/10 text-blue-400 border border-blue-500/20; }
+.status-in_progress { @apply bg-yellow-500/10 text-yellow-400 border border-yellow-500/20; }
+.status-waiting_parts { @apply bg-orange-500/10 text-orange-400 border border-orange-500/20; }
+.status-ready       { @apply bg-accent/10 text-accent border border-accent/20; }
+.status-delivered   { @apply bg-white/5 text-white/40 border border-white/10; }
+
+@media print {
+  .no-print { display: none !important; }
+  body { background: white !important; color: black !important; }
+  .print-receipt { background: white !important; color: black !important; box-shadow: none !important; border: none !important; width: 100% !important; max-width: 100% !important; }
+}

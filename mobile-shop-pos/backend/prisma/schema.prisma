@@ -1,0 +1,193 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Customer {
+  id              String         @id @default(uuid())
+  name            String
+  phone           String         @unique
+  whatsappNumber  String?
+  whatsappOptIn   Boolean        @default(false)
+  createdAt       DateTime       @default(now())
+  sales           Sale[]
+  repairs         Repair[]
+  notifications   Notification[]
+}
+
+model Category {
+  id              String     @id @default(uuid())
+  name            String
+  icon            String?
+  warrantyMonths  Int        @default(3)
+  isActive        Boolean    @default(true)
+  createdAt       DateTime   @default(now())
+  products        Product[]
+}
+
+model Product {
+  id                 String            @id @default(uuid())
+  categoryId         String
+  name               String
+  sku                String            @unique
+  barcode            String            @unique
+  sellingPrice       Decimal           @db.Decimal(10, 2)
+  costPrice          Decimal           @db.Decimal(10, 2)
+  stockQuantity      Int               @default(0)
+  lowStockThreshold  Int               @default(5)
+  warrantyMonths     Int?
+  imageUrl           String?
+  isActive           Boolean           @default(true)
+  hasImei            Boolean           @default(false)
+  createdAt          DateTime          @default(now())
+  category           Category          @relation(fields: [categoryId], references: [id])
+  variants           ProductVariant[]
+  saleItems          SaleItem[]
+  imeiRecords        ImeiRecord[]
+  warrantyRecords    WarrantyRecord[]
+}
+
+model ProductVariant {
+  id             String    @id @default(uuid())
+  productId      String
+  variantName    String
+  priceOverride  Decimal?  @db.Decimal(10, 2)
+  stockQuantity  Int       @default(0)
+  barcode        String    @unique
+  createdAt      DateTime  @default(now())
+  product        Product   @relation(fields: [productId], references: [id])
+  saleItems      SaleItem[]
+}
+
+model ImeiRecord {
+  id         String      @id @default(uuid())
+  productId  String
+  imei       String      @unique
+  status     ImeiStatus  @default(IN_STOCK)
+  saleId     String?
+  createdAt  DateTime    @default(now())
+  product    Product     @relation(fields: [productId], references: [id])
+  sale       Sale?       @relation(fields: [saleId], references: [id])
+  saleItems  SaleItem[]
+}
+
+model Sale {
+  id              String           @id @default(uuid())
+  customerId      String
+  invoiceNumber   String           @unique
+  totalAmount     Decimal          @db.Decimal(10, 2)
+  paymentMethod   PaymentMethod
+  createdAt       DateTime         @default(now())
+  customer        Customer         @relation(fields: [customerId], references: [id])
+  items           SaleItem[]
+  warrantyRecords WarrantyRecord[]
+  notifications   Notification[]
+  imeiRecords     ImeiRecord[]
+}
+
+model SaleItem {
+  id        String          @id @default(uuid())
+  saleId    String
+  productId String
+  variantId String?
+  imeiId    String?
+  quantity  Int
+  unitPrice Decimal         @db.Decimal(10, 2)
+  sale      Sale            @relation(fields: [saleId], references: [id])
+  product   Product         @relation(fields: [productId], references: [id])
+  variant   ProductVariant? @relation(fields: [variantId], references: [id])
+  imei      ImeiRecord?     @relation(fields: [imeiId], references: [id])
+}
+
+model WarrantyRecord {
+  id             String   @id @default(uuid())
+  saleId         String
+  productId      String
+  warrantyMonths Int
+  expiresAt      DateTime
+  createdAt      DateTime @default(now())
+  sale           Sale     @relation(fields: [saleId], references: [id])
+  product        Product  @relation(fields: [productId], references: [id])
+}
+
+model Repair {
+  id                 String        @id @default(uuid())
+  customerId         String
+  deviceName         String
+  issueDescription   String
+  status             RepairStatus  @default(RECEIVED)
+  estimatedCost      Decimal?      @db.Decimal(10, 2)
+  actualCost         Decimal?      @db.Decimal(10, 2)
+  collectedAt        DateTime      @default(now())
+  promisedAt         DateTime?
+  deliveredAt        DateTime?
+  notes              String?
+  createdAt          DateTime      @default(now())
+  customer           Customer      @relation(fields: [customerId], references: [id])
+  notifications      Notification[]
+}
+
+model Notification {
+  id                String             @id @default(uuid())
+  customerId        String
+  saleId            String?
+  repairId          String?
+  channel           NotificationChannel @default(WHATSAPP)
+  messageType       String
+  templateName      String
+  status            NotificationStatus  @default(PENDING)
+  providerMessageId String?
+  sentAt            DateTime?
+  createdAt         DateTime           @default(now())
+  customer          Customer           @relation(fields: [customerId], references: [id])
+  sale              Sale?              @relation(fields: [saleId], references: [id])
+  repair            Repair?            @relation(fields: [repairId], references: [id])
+}
+
+model AiChatSession {
+  id              String   @id @default(uuid())
+  query           String
+  detectedIntent  String
+  actionTaken     String
+  createdAt       DateTime @default(now())
+}
+
+model InvoiceCounter {
+  id      Int @id @default(1)
+  lastNum Int @default(0)
+}
+
+enum ImeiStatus {
+  IN_STOCK
+  SOLD
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  TRANSFER
+}
+
+enum RepairStatus {
+  RECEIVED
+  IN_PROGRESS
+  WAITING_PARTS
+  READY
+  DELIVERED
+}
+
+enum NotificationChannel {
+  WHATSAPP
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+}
