@@ -57,6 +57,8 @@
 
 @media print {
   .no-print { display: none !important; }
-  body { background: white !important; color: black !important; }
-  .print-receipt { background: white !important; color: black !important; box-shadow: none !important; border: none !important; width: 100% !important; max-width: 100% !important; }
+  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+  body { background: white !important; color: black !important; margin: 0 !important; padding: 0 !important; }
+  .print-receipt { background: white !important; color: black !important; box-shadow: none !important; border: none !important; width: 100% !important; max-width: 100% !important; border-radius: 0 !important; margin: 0 !important; }
+  nav, header, aside, .btn-primary, .btn-ghost, footer { display: none !important; }
 }
