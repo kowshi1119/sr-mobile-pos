@@ -24,6 +24,7 @@ export default function Dashboard() {
   const [pendingRepairs, setPendingRepairs] = useState([])
   const [recentSales, setRecentSales] = useState([])
   const [topProducts, setTopProducts] = useState([])
+  const [debtors, setDebtors] = useState([])
 
   useEffect(() => {
     Promise.all([
@@ -32,6 +33,7 @@ export default function Dashboard() {
       api.get('/dashboard/pending-repairs').then(r => setPendingRepairs(r.data)),
       api.get('/dashboard/recent-sales').then(r => setRecentSales(r.data)),
       api.get('/dashboard/top-products').then(r => setTopProducts(r.data)),
+      api.get('/debt').then(r => setDebtors(r.data)),
     ]).catch(console.error)
   }, [])
 
@@ -145,6 +147,31 @@ export default function Dashboard() {
                     <p className="text-white text-sm truncate font-body">{p.name}</p>
                     <p className="text-accent text-xs font-mono">{p.unitsSold} units sold</p>
                   </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Outstanding Debts */}
+          <div className="card">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-white/5">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-red-400 fill-icon">account_balance_wallet</span>
+                <h2 className="font-display font-bold text-white">Outstanding Debts</h2>
+              </div>
+              {debtors.length > 0 && (
+                <span className="badge bg-red-500/10 text-red-400 border border-red-500/20">{debtors.length}</span>
+              )}
+            </div>
+            <div className="divide-y divide-white/5">
+              {debtors.length === 0 && <p className="text-white/30 text-sm p-5 text-center font-mono">No outstanding debts</p>}
+              {debtors.map(c => (
+                <div key={c.id} onClick={() => navigate(`/customers/${c.id}`)} className="flex items-center justify-between px-5 py-3 hover:bg-white/3 cursor-pointer transition-colors">
+                  <div>
+                    <p className="text-white text-sm font-body">{c.name}</p>
+                    <p className="text-white/30 text-xs font-mono">{c.phone}</p>
+                  </div>
+                  <p className="text-red-400 font-mono font-bold text-sm">LKR {Number(c.totalDebt).toLocaleString()}</p>
                 </div>
               ))}
             </div>

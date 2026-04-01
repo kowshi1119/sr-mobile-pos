@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { ScannerProvider, useScanner } from '../context/ScannerContext'
 import AiWidget from './AiWidget'
 
 const NAV = [
@@ -14,8 +15,17 @@ const NAV = [
 ]
 
 export default function Layout() {
+  return (
+    <ScannerProvider>
+      <LayoutInner />
+    </ScannerProvider>
+  )
+}
+
+function LayoutInner() {
   const { admin, logout } = useAuth()
   const navigate = useNavigate()
+  const { openScanner } = useScanner()
   const [sideOpen, setSideOpen] = useState(true)
 
   return (
@@ -77,6 +87,16 @@ export default function Layout() {
 
       {/* AI Widget */}
       <AiWidget />
+
+      {/* Global QR Scanner FAB */}
+      <button
+        onClick={openScanner}
+        title="Scan to Add Product"
+        className="fixed bottom-6 right-6 z-40 flex items-center gap-2 px-4 py-3 bg-brand text-onbrand rounded-full shadow-lg hover:bg-brand/90 active:scale-95 transition-all font-mono text-sm font-bold"
+      >
+        <span className="material-symbols-outlined text-lg">qr_code_scanner</span>
+        <span className="hidden sm:inline">Scan Product</span>
+      </button>
     </div>
   )
 }

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../api/client'
 import jsQR from 'jsqr'
+import { useScanner } from '../context/ScannerContext'
 
 export default function Billing() {
   const navigate = useNavigate()
@@ -18,6 +19,10 @@ export default function Billing() {
   const [cameraOpen, setCameraOpen] = useState(false)
   const [imeiSelecting, setImeiSelecting] = useState(null)
   const [availableImeis, setAvailableImeis] = useState([])
+  const [creditSale, setCreditSale] = useState(false)
+  const [creditAmount, setCreditAmount] = useState('')
+
+  const { pendingProduct, clearPendingProduct } = useScanner()
 
   const searchRef = useRef()
   const videoRef = useRef()
@@ -26,6 +31,15 @@ export default function Billing() {
 
   // Load categories once
   useEffect(() => { api.get('/categories').then(r => setCategories(r.data)) }, [])
+
+  // Handle product scanned from global scanner
+  useEffect(() => {
+    if (pendingProduct) {
+      addToCart(pendingProduct)
+      clearPendingProduct()
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingProduct])
 
   // Load products
   useEffect(() => {
@@ -139,14 +153,19 @@ export default function Billing() {
 
   const total = cart.reduce((s, i) => s + i.unitPrice * i.quantity, 0)
 
+  // Keep creditAmount in sync with total when credit sale is on
+  useEffect(() => {
+    if (creditSale) setCreditAmount(String(total))
+  }, [total, creditSale])
+
   const completeSale = async () => {
-    if (!customer.name || !customer.phone) { alert('Customer name and phone required'); return }
     if (cart.length === 0) { alert('Cart is empty'); return }
     setSubmitting(true)
     try {
       const { data } = await api.post('/sales', {
         customer,
         paymentMethod,
+        creditAmount: creditSale ? parseFloat(creditAmount) || 0 : 0,
         items: cart.map(i => ({
           productId: i.product.id,
           variantId: i.variantId || null,
@@ -266,14 +285,35 @@ export default function Billing() {
 
         {/* Customer */}
         <div className="space-y-2 mb-4">
-          <label className="label">Customer Info</label>
-          <input className="input text-sm py-2" placeholder="Customer name *" value={customer.name} onChange={e => setCustomer(c => ({...c, name: e.target.value}))}/>
-          <input className="input text-sm py-2" placeholder="Phone number *" value={customer.phone} onChange={e => setCustomer(c => ({...c, phone: e.target.value}))}/>
+          <label className="label">Customer Info <span className="text-white/20 font-normal">(optional)</span></label>
+          <input className="input text-sm py-2" placeholder="Customer name" value={customer.name} onChange={e => setCustomer(c => ({...c, name: e.target.value}))}/>
+          <input className="input text-sm py-2" placeholder="Phone number" value={customer.phone} onChange={e => setCustomer(c => ({...c, phone: e.target.value}))}/>
           <input className="input text-sm py-2" placeholder="WhatsApp number (if different)" value={customer.whatsappNumber} onChange={e => setCustomer(c => ({...c, whatsappNumber: e.target.value}))}/>
           <label className="flex items-center gap-2 cursor-pointer">
             <input type="checkbox" className="w-4 h-4 accent-brand" checked={customer.whatsappOptIn} onChange={e => setCustomer(c => ({...c, whatsappOptIn: e.target.checked}))}/>
             <span className="text-white/50 text-xs">Send WhatsApp invoice & updates</span>
           </label>
+        </div>
+
+        {/* Credit Sale Toggle */}
+        <div className="mb-4 p-3 rounded-xl border border-white/10 bg-surface-high space-y-2">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" className="w-4 h-4 accent-red-400" checked={creditSale} onChange={e => { setCreditSale(e.target.checked); if (!e.target.checked) setCreditAmount('') }}/>
+            <span className="text-white/70 text-sm font-mono">Credit sale (customer owes)</span>
+          </label>
+          {creditSale && (
+            <div>
+              <label className="label text-xs">Credit Amount (LKR)</label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                className="input text-sm py-2 border-red-500/30 focus:border-red-500"
+                value={creditAmount}
+                onChange={e => setCreditAmount(e.target.value)}
+              />
+            </div>
+          )}
         </div>
 
         <button onClick={completeSale} disabled={submitting || cart.length === 0} className="btn-primary w-full justify-center py-3 text-base disabled:opacity-40">

@@ -17,28 +17,42 @@ async function getNextInvoiceNumber() {
 
 // POST /api/sales — Complete sale transaction
 router.post('/', auth, async (req, res) => {
-  const { customer: customerData, items, paymentMethod } = req.body;
+  const { customer: customerData, items, paymentMethod, creditAmount } = req.body;
 
   try {
     const result = await prisma.$transaction(async (tx) => {
       // 1. Save or find customer
-      let customer = await tx.customer.findFirst({ where: { phone: customerData.phone } });
-      if (!customer) {
+      // If phone is empty, always create a new anonymous walk-in customer
+      let customer;
+      const phoneProvided = customerData.phone && customerData.phone.trim();
+      if (!phoneProvided) {
         customer = await tx.customer.create({
           data: {
-            name: customerData.name,
-            phone: customerData.phone,
-            whatsappNumber: customerData.whatsappNumber || customerData.phone,
-            whatsappOptIn: customerData.whatsappOptIn || false
+            name: customerData.name && customerData.name.trim() ? customerData.name.trim() : 'Walk-in Customer',
+            phone: `WIC-${Date.now()}`,
+            whatsappNumber: customerData.whatsappNumber || null,
+            whatsappOptIn: false
           }
         });
       } else {
-        // Update opt-in if changed
-        if (customerData.whatsappOptIn !== undefined) {
-          customer = await tx.customer.update({
-            where: { id: customer.id },
-            data: { whatsappOptIn: customerData.whatsappOptIn, name: customerData.name }
+        customer = await tx.customer.findFirst({ where: { phone: customerData.phone.trim() } });
+        if (!customer) {
+          customer = await tx.customer.create({
+            data: {
+              name: customerData.name && customerData.name.trim() ? customerData.name.trim() : 'Walk-in Customer',
+              phone: customerData.phone.trim(),
+              whatsappNumber: customerData.whatsappNumber || customerData.phone.trim(),
+              whatsappOptIn: customerData.whatsappOptIn || false
+            }
           });
+        } else {
+          // Update opt-in if changed
+          if (customerData.whatsappOptIn !== undefined) {
+            customer = await tx.customer.update({
+              where: { id: customer.id },
+              data: { whatsappOptIn: customerData.whatsappOptIn, name: customerData.name && customerData.name.trim() ? customerData.name.trim() : customer.name }
+            });
+          }
         }
       }
 
@@ -113,6 +127,24 @@ router.post('/', auth, async (req, res) => {
 
       return { sale, customer, invoiceNumber, qrDataUrl, invoiceUrl };
     });
+
+    // 12. Credit sale — create DebtRecord outside transaction
+    const parsedCredit = parseFloat(creditAmount);
+    if (!isNaN(parsedCredit) && parsedCredit > 0) {
+      await prisma.debtRecord.create({
+        data: {
+          customerId: result.customer.id,
+          saleId: result.sale.id,
+          type: 'CREDIT',
+          amount: parsedCredit,
+          description: `Credit sale - ${result.invoiceNumber}`
+        }
+      });
+      await prisma.customer.update({
+        where: { id: result.customer.id },
+        data: { totalDebt: { increment: parsedCredit } }
+      });
+    }
 
     // 11. Async WhatsApp notification (outside transaction)
     setImmediate(async () => {

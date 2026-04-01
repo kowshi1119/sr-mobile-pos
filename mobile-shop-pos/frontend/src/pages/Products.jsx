@@ -21,19 +21,45 @@ function QrModal({ product, onClose }) {
   useEffect(() => {
     api.get(`/products/${product.id}/qr`).then(r => setQr(r.data))
   }, [product.id])
-  const download = () => {
-    const a = document.createElement('a'); a.href = qr.qrDataUrl; a.download = `${qr.sku}-qr.png`; a.click()
+
+  const download = (dataUrl, label) => {
+    const a = document.createElement('a')
+    a.href = dataUrl
+    a.download = `${product.name.replace(/\s+/g, '-')}-${label}.png`
+    a.click()
   }
+
   return (
     <Modal title={`QR Code — ${product.name}`} onClose={onClose}>
-      <div className="flex flex-col items-center gap-4">
-        {qr ? <>
-          <img src={qr.qrDataUrl} alt="QR" className="w-48 h-48 rounded-xl"/>
-          <p className="font-mono text-brand text-sm">{qr.barcode}</p>
-          <p className="text-white/40 text-xs">{qr.sku}</p>
-          <button onClick={download} className="btn-primary"><span className="material-symbols-outlined text-sm">download</span>Download PNG</button>
-        </> : <span className="material-symbols-outlined animate-spin text-brand text-3xl">refresh</span>}
-      </div>
+      {qr ? (
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-6">
+            {/* Smart QR */}
+            <div className="flex flex-col items-center gap-3">
+              <p className="text-white/50 text-xs font-mono uppercase tracking-wider">Smart QR (SR-Mobile)</p>
+              <img src={qr.qrDataUrl} alt="Smart QR" className="w-40 h-40 rounded-xl"/>
+              <p className="text-white/30 text-xs font-mono text-center">Scan from any page</p>
+              <button onClick={() => download(qr.qrDataUrl, 'smart-qr')} className="btn-ghost py-2 px-3 text-sm">
+                <span className="material-symbols-outlined text-sm">download</span>Download
+              </button>
+            </div>
+            {/* Barcode QR */}
+            <div className="flex flex-col items-center gap-3">
+              <p className="text-white/50 text-xs font-mono uppercase tracking-wider">Barcode QR (Standard)</p>
+              <img src={qr.barcodeQrDataUrl} alt="Barcode QR" className="w-40 h-40 rounded-xl"/>
+              <p className="text-white/30 text-xs font-mono text-center">{qr.barcode}</p>
+              <button onClick={() => download(qr.barcodeQrDataUrl, 'barcode-qr')} className="btn-ghost py-2 px-3 text-sm">
+                <span className="material-symbols-outlined text-sm">download</span>Download
+              </button>
+            </div>
+          </div>
+          <p className="text-white/20 text-xs text-center font-mono">SKU: {qr.sku}</p>
+        </div>
+      ) : (
+        <div className="flex justify-center py-8">
+          <span className="material-symbols-outlined animate-spin text-brand text-3xl">refresh</span>
+        </div>
+      )}
     </Modal>
   )
 }

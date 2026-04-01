@@ -126,13 +126,27 @@ router.delete('/:id', auth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// GET /api/products/:id — Single product by ID (used by global QR scanner)
+router.get('/:id', auth, async (req, res) => {
+  try {
+    const product = await prisma.product.findUnique({
+      where: { id: req.params.id },
+      include: { category: true, variants: true }
+    });
+    if (!product) return res.status(404).json({ error: 'Product not found' });
+    res.json(product);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // GET /api/products/:id/qr
 router.get('/:id/qr', auth, async (req, res) => {
   try {
     const product = await prisma.product.findUnique({ where: { id: req.params.id } });
     if (!product) return res.status(404).json({ error: 'Product not found' });
-    const qrDataUrl = await QRCode.toDataURL(product.barcode, { width: 300, margin: 2 });
-    res.json({ qrDataUrl, barcode: product.barcode, sku: product.sku, name: product.name });
+    const srMobileStr = `SR-MOBILE|PROD|${product.id}|${product.sku}|${product.barcode}|${product.name}|${product.sellingPrice}`;
+    const qrDataUrl = await QRCode.toDataURL(srMobileStr, { width: 300, margin: 2 });
+    const barcodeQrDataUrl = await QRCode.toDataURL(product.barcode, { width: 300, margin: 2 });
+    res.json({ qrDataUrl, barcodeQrDataUrl, barcode: product.barcode, sku: product.sku, name: product.name });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
