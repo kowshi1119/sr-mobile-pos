@@ -15,7 +15,7 @@ export default function Billing() {
   const [paymentMethod, setPaymentMethod] = useState('CASH')
   const [submitting, setSubmitting] = useState(false)
   const [scanFlash, setScanFlash] = useState(false)
-  const [lastScanned, setLastScanned] = useState(null)
+  const [scanStatus, setScanStatus] = useState(null)
   const [cameraOpen, setCameraOpen] = useState(false)
   const [imeiSelecting, setImeiSelecting] = useState(null)
   const [availableImeis, setAvailableImeis] = useState([])
@@ -27,7 +27,9 @@ export default function Billing() {
   const searchRef = useRef()
   const videoRef = useRef()
   const canvasRef = useRef()
-  const barcodeBuffer = useRef({ chars:'', lastTime:0 })
+  const barcodeBuffer = useRef({ chars:'', lastTime:0, timer: null })
+  const scanQueue = useRef([])
+  const isProcessing = useRef(false)
 
   // Load categories once
   useEffect(() => { api.get('/categories').then(r => setCategories(r.data)) }, [])
@@ -47,30 +49,107 @@ export default function Billing() {
       .then(r => setProducts(r.data))
   }, [search, catFilter])
 
+  const addToCart = useCallback(async (product, variantId = null) => {
+    const key = `${product.id}-${variantId || 'base'}`
+    const price = variantId
+      ? product.variants?.find(v => v.id === variantId)?.priceOverride || product.sellingPrice
+      : product.sellingPrice
+
+    if (product.hasImei) {
+      // Fetch available IMEIs
+      const { data } = await api.get(`/products/${product.id}/imei`)
+      const inStock = data.filter(i => i.status === 'IN_STOCK')
+      if (inStock.length === 0) { alert('No IMEI in stock for this product!'); return }
+      setAvailableImeis(inStock)
+      setImeiSelecting({ product, variantId, price })
+      return
+    }
+
+    setCart(c => {
+      const existing = c.find(i => i.key === key)
+      if (existing) {
+        if (existing.quantity >= existing.product.stockQuantity) return c
+        return c.map(i => i.key === key ? { ...i, quantity: i.quantity + 1 } : i)
+      }
+      return [...c, { key, product, variantId, imeiId: null, imeiNumber: null, quantity: 1, unitPrice: Number(price) }]
+    })
+  }, [setCart, setAvailableImeis, setImeiSelecting])
+
+  const processNextScan = useCallback(async () => {
+    if (isProcessing.current || scanQueue.current.length === 0) return
+    isProcessing.current = true
+    const barcode = scanQueue.current.shift()
+    try {
+      const { data } = await api.get('/products', { params: { barcode } })
+      if (data.length > 0) {
+        const product = data[0]
+        await addToCart(product)
+        setScanStatus({ type: 'success', name: product.name, sku: product.sku })
+        setScanFlash(true)
+        setTimeout(() => setScanFlash(false), 300)
+        try {
+          const ctx = new (window.AudioContext || window.webkitAudioContext)()
+          const osc = ctx.createOscillator()
+          const gain = ctx.createGain()
+          osc.connect(gain); gain.connect(ctx.destination)
+          osc.frequency.value = 1800; osc.type = 'square'
+          gain.gain.setValueAtTime(0.1, ctx.currentTime)
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1)
+          osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.1)
+        } catch(e) {}
+      } else {
+        setScanStatus({ type: 'error', name: 'Product not found', sku: barcode })
+        try {
+          const ctx = new (window.AudioContext || window.webkitAudioContext)()
+          const osc = ctx.createOscillator()
+          const gain = ctx.createGain()
+          osc.connect(gain); gain.connect(ctx.destination)
+          osc.frequency.value = 400; osc.type = 'square'
+          gain.gain.setValueAtTime(0.2, ctx.currentTime)
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3)
+          osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.3)
+        } catch(e) {}
+      }
+      setTimeout(() => setScanStatus(null), 2500)
+    } catch(err) {
+      console.error('Scan error:', err)
+    } finally {
+      isProcessing.current = false
+      if (scanQueue.current.length > 0) processNextScan()
+    }
+  }, [addToCart])
+
   // Barcode reader detection
-  const handleBarcodeKeydown = useCallback(async (e) => {
-    if (document.activeElement === searchRef.current) return
+  const handleBarcodeKeydown = useCallback((e) => {
+    const tag = document.activeElement?.tagName
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
     const now = Date.now()
     const buf = barcodeBuffer.current
-    if (now - buf.lastTime > 100) { buf.chars = '' }
+    if (now - buf.lastTime > 80 && buf.chars.length > 0) buf.chars = ''
     buf.lastTime = now
+    if (buf.timer) clearTimeout(buf.timer)
 
-    if (e.key === 'Enter' && buf.chars.length > 3) {
-      const barcode = buf.chars
-      buf.chars = ''
-      try {
-        const { data } = await api.get('/products', { params: { barcode } })
-        if (data.length > 0) {
-          addToCart(data[0])
-          setScanFlash(true)
-          setLastScanned(data[0])
-          setTimeout(() => setScanFlash(false), 400)
-        }
-      } catch {}
-    } else if (e.key.length === 1) {
+    if (e.key === 'Enter') {
+      if (buf.chars.length >= 3) {
+        const barcode = buf.chars.trim()
+        buf.chars = ''
+        scanQueue.current.push(barcode)
+        processNextScan()
+      }
+    } else if (e.key.length === 1 && !e.ctrlKey && !e.altKey) {
       buf.chars += e.key
+      if (buf.chars.length >= 20) {
+        buf.timer = setTimeout(() => {
+          if (buf.chars.length >= 3) {
+            const barcode = buf.chars.trim()
+            buf.chars = ''
+            scanQueue.current.push(barcode)
+            processNextScan()
+          }
+        }, 100)
+      }
     }
-  }, [])
+  }, [processNextScan])
 
   useEffect(() => {
     window.addEventListener('keydown', handleBarcodeKeydown)
@@ -97,7 +176,11 @@ export default function Billing() {
           stream.getTracks().forEach(t => t.stop())
           setCameraOpen(false)
           api.get('/products', { params: { barcode: code.data } }).then(({ data }) => {
-            if (data.length > 0) { addToCart(data[0]); setLastScanned(data[0]) }
+            if (data.length > 0) {
+              addToCart(data[0])
+              setScanStatus({ type: 'success', name: data[0].name, sku: data[0].sku })
+              setTimeout(() => setScanStatus(null), 2500)
+            }
           })
         } else { animId = requestAnimationFrame(scan) }
       }
@@ -108,32 +191,6 @@ export default function Billing() {
       if (videoRef.current?.srcObject) videoRef.current.srcObject.getTracks().forEach(t => t.stop())
     }
   }, [cameraOpen])
-
-  const addToCart = async (product, variantId = null) => {
-    const key = `${product.id}-${variantId || 'base'}`
-    const price = variantId
-      ? product.variants?.find(v => v.id === variantId)?.priceOverride || product.sellingPrice
-      : product.sellingPrice
-
-    if (product.hasImei) {
-      // Fetch available IMEIs
-      const { data } = await api.get(`/products/${product.id}/imei`)
-      const inStock = data.filter(i => i.status === 'IN_STOCK')
-      if (inStock.length === 0) { alert('No IMEI in stock for this product!'); return }
-      setAvailableImeis(inStock)
-      setImeiSelecting({ product, variantId, price })
-      return
-    }
-
-    setCart(c => {
-      const existing = c.find(i => i.key === key)
-      if (existing) {
-        if (existing.quantity >= existing.product.stockQuantity) return c
-        return c.map(i => i.key === key ? { ...i, quantity: i.quantity + 1 } : i)
-      }
-      return [...c, { key, product, variantId, imeiId: null, imeiNumber: null, quantity: 1, unitPrice: Number(price) }]
-    })
-  }
 
   const selectImei = (imei) => {
     const { product, variantId, price } = imeiSelecting
@@ -178,6 +235,19 @@ export default function Billing() {
     } catch (e) { alert(e.response?.data?.error || 'Sale failed'); setSubmitting(false) }
   }
 
+  useEffect(() => {
+    const handleShortcuts = (e) => {
+      const tag = document.activeElement?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return
+      if (e.key === 'F2') { e.preventDefault(); searchRef.current?.focus() }
+      if (e.key === 'F4') { e.preventDefault(); setCameraOpen(true) }
+      if (e.key === 'F12') { e.preventDefault(); if (cart.length > 0) completeSale() }
+      if (e.key === 'Escape') { setSearch(''); searchRef.current?.blur() }
+    }
+    window.addEventListener('keydown', handleShortcuts)
+    return () => window.removeEventListener('keydown', handleShortcuts)
+  }, [cart, completeSale])
+
   return (
     <div className={`flex gap-5 h-full -m-6 transition-colors duration-300 ${scanFlash ? 'bg-brand/10' : ''}`}>
       {/* Left — Product Browser */}
@@ -185,17 +255,38 @@ export default function Billing() {
         <div className="flex items-center justify-between mb-4">
           <h1 className="font-display font-bold text-xl text-white">New Sale</h1>
           <div className="flex items-center gap-2">
-            {lastScanned && (
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-brand/10 border border-brand/20 rounded-lg animate-fade-in">
-                <span className="material-symbols-outlined text-brand text-sm">barcode_scanner</span>
-                <span className="text-brand text-xs font-mono">{lastScanned.name}</span>
-              </div>
+            {scanQueue.current.length > 0 && (
+              <span className="badge bg-brand/10 text-brand border-brand/20 text-xs font-mono">
+                {scanQueue.current.length} queued
+              </span>
             )}
             <button onClick={() => setCameraOpen(true)} className="btn-ghost py-2 px-3">
               <span className="material-symbols-outlined text-lg">qr_code_scanner</span>
             </button>
           </div>
         </div>
+
+        {/* Scan Status Bar */}
+        {scanStatus ? (
+          <div className={`flex items-center gap-3 px-4 py-2.5 rounded-xl border animate-fade-in text-sm font-body transition-all mb-3 ${scanStatus.type === 'success' ? 'bg-accent/10 border-accent/20 text-accent' : 'bg-red-500/10 border-red-500/20 text-red-400'}`}>
+            <span className="material-symbols-outlined text-lg fill-icon flex-shrink-0">
+              {scanStatus.type === 'success' ? 'barcode_scanner' : 'error'}
+            </span>
+            <div className="flex-1 min-w-0">
+              <p className="font-medium truncate">{scanStatus.name}</p>
+              <p className="text-xs opacity-60 font-mono">{scanStatus.sku}</p>
+            </div>
+            {scanStatus.type === 'success' && (
+              <span className="material-symbols-outlined text-sm fill-icon flex-shrink-0">check_circle</span>
+            )}
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/3 border border-white/5 text-white/20 text-xs font-mono mb-3">
+            <span className="material-symbols-outlined text-sm">barcode_scanner</span>
+            Ready to scan — point barcode reader at product
+          </div>
+        )}
+
         <div className="flex gap-2 mb-4">
           <div className="relative flex-1">
             <span className="absolute left-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-white/30 text-lg">search</span>
@@ -224,6 +315,12 @@ export default function Billing() {
               <p className={`text-xs font-mono mt-0.5 ${p.stockQuantity <= p.lowStockThreshold ? 'text-red-400' : 'text-white/20'}`}>Qty: {p.stockQuantity}</p>
             </button>
           ))}
+        </div>
+        <div className="flex gap-4 text-xs font-mono text-white/20 pt-2 border-t border-white/5 mt-2">
+          <span>F2 Search</span>
+          <span>F4 Camera</span>
+          <span>F12 Complete Sale</span>
+          <span>ESC Clear</span>
         </div>
       </div>
 
@@ -259,6 +356,12 @@ export default function Billing() {
                 </div>
                 <p className="font-display font-bold text-white text-sm">LKR {(item.unitPrice * item.quantity).toLocaleString()}</p>
               </div>
+              {!item.product.hasImei && item.quantity >= item.product.stockQuantity && (
+                <p className="text-red-400 text-xs font-mono mt-1 flex items-center gap-1">
+                  <span className="material-symbols-outlined text-xs">warning</span>
+                  Max stock reached ({item.product.stockQuantity})
+                </p>
+              )}
             </div>
           ))}
         </div>
