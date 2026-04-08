@@ -78,6 +78,17 @@ router.post('/', auth, async (req, res) => {
         const product = await tx.product.findUnique({ where: { id: item.productId }, include: { category: true } });
         if (!product) throw new Error(`Product ${item.productId} not found`);
 
+        let imeiRecord = null;
+        if (product.hasImei) {
+          if (!item.imeiId) throw new Error(`Please select an IMEI for ${product.name}`);
+          if (item.quantity !== 1) throw new Error(`IMEI product ${product.name} must be sold one unit at a time`);
+
+          imeiRecord = await tx.imeiRecord.findUnique({ where: { id: item.imeiId } });
+          if (!imeiRecord) throw new Error(`Selected IMEI was not found for ${product.name}`);
+          if (imeiRecord.productId !== item.productId) throw new Error(`Selected IMEI does not belong to ${product.name}`);
+          if (imeiRecord.status !== 'IN_STOCK') throw new Error(`IMEI ${imeiRecord.imei} is already sold`);
+        }
+
         // Check stock
         if (!product.hasImei && product.stockQuantity < item.quantity) {
           throw new Error(`Insufficient stock for ${product.name}`);
@@ -103,9 +114,9 @@ router.post('/', auth, async (req, res) => {
         }
 
         // 7. Mark IMEI as SOLD
-        if (item.imeiId) {
+        if (imeiRecord) {
           await tx.imeiRecord.update({
-            where: { id: item.imeiId },
+            where: { id: imeiRecord.id },
             data: { status: 'SOLD', saleId: sale.id }
           });
           await tx.product.update({ where: { id: item.productId }, data: { stockQuantity: { decrement: 1 } } });

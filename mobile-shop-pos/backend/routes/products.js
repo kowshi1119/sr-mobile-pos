@@ -31,6 +31,94 @@ function generateBarcode() {
   return Date.now().toString() + Math.floor(Math.random() * 1000).toString().padStart(3, '0');
 }
 
+function normalizeBarcode(value = '') {
+  return String(value ?? '').trim();
+}
+
+async function findBarcodeConflict(barcode, { excludeProductId, reservedBarcodes } = {}) {
+  if (!barcode) return null;
+  if (reservedBarcodes?.has(barcode)) return 'is duplicated in this request';
+
+  const [productMatch, variantMatch, imeiMatch] = await Promise.all([
+    prisma.product.findFirst({
+      where: {
+        barcode,
+        ...(excludeProductId ? { NOT: { id: excludeProductId } } : {})
+      },
+      select: { id: true, name: true }
+    }),
+    prisma.productVariant.findFirst({
+      where: { barcode },
+      select: { id: true, variantName: true }
+    }),
+    prisma.imeiRecord.findFirst({
+      where: { imei: barcode },
+      select: { id: true }
+    })
+  ]);
+
+  if (productMatch) return `is already used by product "${productMatch.name}"`;
+  if (variantMatch) return `is already used by variant "${variantMatch.variantName}"`;
+  if (imeiMatch) return 'matches an existing IMEI number';
+  return null;
+}
+
+async function ensureUniqueBarcode(inputBarcode, options = {}) {
+  const requestedBarcode = normalizeBarcode(inputBarcode);
+
+  if (requestedBarcode) {
+    const conflict = await findBarcodeConflict(requestedBarcode, options);
+    if (conflict) {
+      const error = new Error(`Barcode "${requestedBarcode}" ${conflict}`);
+      error.status = 400;
+      throw error;
+    }
+
+    options.reservedBarcodes?.add(requestedBarcode);
+    return requestedBarcode;
+  }
+
+  let generatedBarcode = generateBarcode();
+  while (await findBarcodeConflict(generatedBarcode, options)) {
+    generatedBarcode = generateBarcode();
+  }
+
+  options.reservedBarcodes?.add(generatedBarcode);
+  return generatedBarcode;
+}
+
+function normalizeImei(value = '') {
+  return String(value).replace(/[\s-]+/g, '').trim();
+}
+
+function prepareImeiBatch(values = []) {
+  const invalidEntries = [];
+  const duplicateEntries = [];
+  const normalized = [];
+  const seen = new Set();
+
+  for (const rawValue of Array.isArray(values) ? values : []) {
+    const raw = String(rawValue ?? '').trim();
+    if (!raw) continue;
+
+    const cleaned = normalizeImei(raw);
+    if (!cleaned) {
+      invalidEntries.push(raw);
+      continue;
+    }
+
+    if (seen.has(cleaned)) {
+      duplicateEntries.push(cleaned);
+      continue;
+    }
+
+    seen.add(cleaned);
+    normalized.push(cleaned);
+  }
+
+  return { normalized, duplicateEntries, invalidEntries };
+}
+
 // GET /api/products
 router.get('/', auth, async (req, res) => {
   try {
@@ -39,18 +127,52 @@ router.get('/', auth, async (req, res) => {
     if (category) where.categoryId = category;
     if (search) where.OR = [
       { name: { contains: search, mode: 'insensitive' } },
-      { sku: { contains: search, mode: 'insensitive' } }
+      { sku: { contains: search, mode: 'insensitive' } },
+      { barcode: { contains: search, mode: 'insensitive' } }
     ];
+
     if (barcode) {
-      // Also check variants
-      const product = await prisma.product.findFirst({ where: { barcode, isActive: true }, include: { category: true, variants: true } });
-      if (!product) {
-        const variant = await prisma.productVariant.findFirst({ where: { barcode }, include: { product: { include: { category: true } } } });
-        if (variant) return res.json([{ ...variant.product, matchedVariant: variant }]);
-        return res.json([]);
+      const scanCode = String(barcode).trim();
+      const normalizedScan = normalizeImei(scanCode);
+
+      const product = await prisma.product.findFirst({
+        where: { barcode: scanCode, isActive: true },
+        include: { category: true, variants: true }
+      });
+      if (product) return res.json([product]);
+
+      const variant = await prisma.productVariant.findFirst({
+        where: { barcode: scanCode },
+        include: { product: { include: { category: true, variants: true } } }
+      });
+      if (variant?.product?.isActive) return res.json([{ ...variant.product, matchedVariant: variant }]);
+
+      const imeiFilters = [{ imei: scanCode }];
+      if (normalizedScan && normalizedScan !== scanCode) imeiFilters.push({ imei: normalizedScan });
+
+      const imeiRecord = await prisma.imeiRecord.findFirst({
+        where: { OR: imeiFilters },
+        include: {
+          sale: { select: { invoiceNumber: true, createdAt: true } },
+          product: { include: { category: true, variants: true } }
+        }
+      });
+
+      if (imeiRecord?.product?.isActive) {
+        return res.json([{
+          ...imeiRecord.product,
+          matchedImei: {
+            id: imeiRecord.id,
+            imei: imeiRecord.imei,
+            status: imeiRecord.status,
+            sale: imeiRecord.sale
+          }
+        }]);
       }
-      return res.json([product]);
+
+      return res.json([]);
     }
+
     const products = await prisma.product.findMany({
       where,
       include: { category: true, variants: true, _count: { select: { imeiRecords: { where: { status: 'IN_STOCK' } } } } },
@@ -63,43 +185,74 @@ router.get('/', auth, async (req, res) => {
 // POST /api/products
 router.post('/', auth, async (req, res) => {
   try {
-    const { categoryId, name, sellingPrice, costPrice, stockQuantity, lowStockThreshold, warrantyMonths, imageUrl, hasImei, imeiNumbers, variants } = req.body;
+    const { categoryId, name, sellingPrice, costPrice, stockQuantity, lowStockThreshold, warrantyMonths, imageUrl, barcode, hasImei, imeiNumbers, variants } = req.body;
     const category = await prisma.category.findUnique({ where: { id: categoryId } });
-    const sku = generateSku(category.name, name);
-    const barcode = generateBarcode();
+    if (!category) return res.status(400).json({ error: 'Category not found' });
 
-    const product = await prisma.product.create({
-      data: {
-        categoryId, name, sku, barcode,
-        sellingPrice: parseFloat(sellingPrice),
-        costPrice: parseFloat(costPrice),
-        stockQuantity: parseInt(stockQuantity) || 0,
-        lowStockThreshold: parseInt(lowStockThreshold) || 5,
-        warrantyMonths: warrantyMonths ? parseInt(warrantyMonths) : null,
-        imageUrl: imageUrl || null,
-        hasImei: hasImei || false,
-        variants: variants && variants.length > 0 ? {
-          create: variants.map(v => ({
+    const sku = generateSku(category.name, name);
+    const reservedBarcodes = new Set();
+    const resolvedBarcode = await ensureUniqueBarcode(barcode, { reservedBarcodes });
+    const preparedVariants = Array.isArray(variants) && variants.length > 0
+      ? await Promise.all(
+          variants.map(async v => ({
             variantName: v.variantName,
             priceOverride: v.priceOverride ? parseFloat(v.priceOverride) : null,
             stockQuantity: parseInt(v.stockQuantity) || 0,
-            barcode: generateBarcode()
+            barcode: await ensureUniqueBarcode(v.barcode, { reservedBarcodes })
           }))
+        )
+      : [];
+    const parsedStockQuantity = parseInt(stockQuantity) || 0;
+    const { normalized: cleanedImeis, duplicateEntries, invalidEntries } = prepareImeiBatch(imeiNumbers);
+    const existingImeis = cleanedImeis.length > 0
+      ? await prisma.imeiRecord.findMany({ where: { imei: { in: cleanedImeis } }, select: { imei: true } })
+      : [];
+    const existingSet = new Set(existingImeis.map(item => item.imei));
+    const newImeis = cleanedImeis.filter(imei => !existingSet.has(imei));
+
+    const product = await prisma.product.create({
+      data: {
+        categoryId, name, sku, barcode: resolvedBarcode,
+        sellingPrice: parseFloat(sellingPrice),
+        costPrice: parseFloat(costPrice),
+        stockQuantity: hasImei && cleanedImeis.length > 0 ? newImeis.length : parsedStockQuantity,
+        lowStockThreshold: parseInt(lowStockThreshold) || 5,
+        warrantyMonths: warrantyMonths ? parseInt(warrantyMonths) : null,
+        imageUrl: imageUrl || null,
+        hasImei: !!hasImei,
+        variants: preparedVariants.length > 0 ? {
+          create: preparedVariants
         } : undefined,
-        imeiRecords: imeiNumbers && imeiNumbers.length > 0 ? {
-          create: imeiNumbers.filter(i => i.trim()).map(imei => ({ imei: imei.trim(), status: 'IN_STOCK' }))
+        imeiRecords: newImeis.length > 0 ? {
+          create: newImeis.map(imei => ({ imei, status: 'IN_STOCK' }))
         } : undefined
       },
       include: { category: true, variants: true, imeiRecords: true }
     });
-    res.status(201).json(product);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+
+    res.status(201).json({
+      ...product,
+      imeiSummary: {
+        createdCount: newImeis.length,
+        skippedExisting: cleanedImeis.filter(imei => existingSet.has(imei)),
+        skippedDuplicateInput: duplicateEntries,
+        invalidEntries
+      }
+    });
+  } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
 });
 
 // PATCH /api/products/:id
 router.patch('/:id', auth, async (req, res) => {
   try {
-    const { name, sellingPrice, costPrice, stockQuantity, lowStockThreshold, warrantyMonths, imageUrl, isActive } = req.body;
+    const { name, sellingPrice, costPrice, stockQuantity, lowStockThreshold, warrantyMonths, imageUrl, barcode, isActive } = req.body;
+    const existingProduct = await prisma.product.findUnique({ where: { id: req.params.id }, select: { id: true } });
+    if (!existingProduct) return res.status(404).json({ error: 'Product not found' });
+
+    const nextBarcode = barcode !== undefined
+      ? await ensureUniqueBarcode(barcode, { excludeProductId: req.params.id, reservedBarcodes: new Set() })
+      : undefined;
+
     const product = await prisma.product.update({
       where: { id: req.params.id },
       data: {
@@ -110,12 +263,13 @@ router.patch('/:id', auth, async (req, res) => {
         ...(lowStockThreshold !== undefined && { lowStockThreshold: parseInt(lowStockThreshold) }),
         ...(warrantyMonths !== undefined && { warrantyMonths: warrantyMonths ? parseInt(warrantyMonths) : null }),
         ...(imageUrl !== undefined && { imageUrl }),
+        ...(nextBarcode !== undefined && { barcode: nextBarcode }),
         ...(isActive !== undefined && { isActive })
       },
       include: { category: true, variants: true }
     });
     res.json(product);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
 });
 
 // DELETE /api/products/:id
@@ -178,14 +332,47 @@ router.post('/:id/imei', auth, async (req, res) => {
   try {
     const { imeiNumbers } = req.body;
     if (!imeiNumbers || !imeiNumbers.length) return res.status(400).json({ error: 'No IMEI numbers provided' });
-    const created = await prisma.$transaction(
-      imeiNumbers.filter(i => i.trim()).map(imei =>
-        prisma.imeiRecord.create({ data: { productId: req.params.id, imei: imei.trim(), status: 'IN_STOCK' } })
-      )
-    );
-    // Update stock count
-    await prisma.product.update({ where: { id: req.params.id }, data: { stockQuantity: { increment: created.length } } });
-    res.status(201).json(created);
+
+    const product = await prisma.product.findUnique({ where: { id: req.params.id }, select: { id: true, name: true } });
+    if (!product) return res.status(404).json({ error: 'Product not found' });
+
+    const { normalized: cleanedImeis, duplicateEntries, invalidEntries } = prepareImeiBatch(imeiNumbers);
+    if (cleanedImeis.length === 0) {
+      return res.status(400).json({
+        error: 'No valid IMEI numbers provided',
+        created: [],
+        skippedExisting: [],
+        skippedDuplicateInput: duplicateEntries,
+        invalidEntries
+      });
+    }
+
+    const existingRecords = await prisma.imeiRecord.findMany({
+      where: { imei: { in: cleanedImeis } },
+      select: { imei: true }
+    });
+    const existingSet = new Set(existingRecords.map(item => item.imei));
+    const imeisToCreate = cleanedImeis.filter(imei => !existingSet.has(imei));
+
+    const created = imeisToCreate.length > 0
+      ? await prisma.$transaction(
+          imeisToCreate.map(imei =>
+            prisma.imeiRecord.create({ data: { productId: req.params.id, imei, status: 'IN_STOCK' } })
+          )
+        )
+      : [];
+
+    if (created.length > 0) {
+      await prisma.product.update({ where: { id: req.params.id }, data: { stockQuantity: { increment: created.length } } });
+    }
+
+    res.status(created.length > 0 ? 201 : 200).json({
+      created,
+      skippedExisting: cleanedImeis.filter(imei => existingSet.has(imei)),
+      skippedDuplicateInput: duplicateEntries,
+      invalidEntries,
+      message: created.length > 0 ? `${created.length} IMEI number(s) added` : 'No new IMEI numbers were added'
+    });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

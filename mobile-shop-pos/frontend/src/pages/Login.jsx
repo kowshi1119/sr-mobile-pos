@@ -15,7 +15,10 @@ export default function Login() {
     try {
       await login(form.email, form.password)
       navigate('/dashboard')
-    } catch { setError('Invalid email or password') } finally { setLoading(false) }
+    } catch (err) {
+      if (!err.response) setError('Cannot reach the API server. Please check that the backend is running.')
+      else setError(err.response?.data?.error || 'Invalid email or password')
+    } finally { setLoading(false) }
   }
 
   return (

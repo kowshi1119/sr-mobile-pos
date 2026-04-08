@@ -64,6 +64,23 @@ function QrModal({ product, onClose }) {
   )
 }
 
+function formatImeiSummary(summary) {
+  if (!summary) return ''
+
+  const createdCount = Array.isArray(summary.created) ? summary.created.length : (summary.createdCount || 0)
+  const existingCount = summary.skippedExisting?.length || 0
+  const duplicateCount = summary.skippedDuplicateInput?.length || 0
+  const invalidCount = summary.invalidEntries?.length || 0
+  const parts = []
+
+  if (createdCount) parts.push(`${createdCount} added`)
+  if (existingCount) parts.push(`${existingCount} already existed`)
+  if (duplicateCount) parts.push(`${duplicateCount} duplicate line(s) skipped`)
+  if (invalidCount) parts.push(`${invalidCount} invalid line(s) ignored`)
+
+  return parts.length > 0 ? parts.join(', ') : 'No new IMEIs were added'
+}
+
 function ImeiModal({ product, onClose }) {
   const [imeis, setImeis] = useState([])
   const [newImeis, setNewImeis] = useState('')
@@ -72,10 +89,14 @@ function ImeiModal({ product, onClose }) {
   const addImeis = async () => {
     setSaving(true)
     try {
-      const nums = newImeis.split('\n').filter(Boolean)
-      await api.post(`/products/${product.id}/imei`, { imeiNumbers: nums })
+      const nums = newImeis.split('\n').map(v => v.trim()).filter(Boolean)
+      const { data } = await api.post(`/products/${product.id}/imei`, { imeiNumbers: nums })
       const r = await api.get(`/products/${product.id}/imei`)
-      setImeis(r.data); setNewImeis('')
+      setImeis(r.data)
+      setNewImeis('')
+      alert(`IMEI update complete: ${formatImeiSummary(data)}`)
+    } catch (e) {
+      alert(e.response?.data?.error || 'Error adding IMEIs')
     } finally { setSaving(false) }
   }
   const inStock = imeis.filter(i => i.status === 'IN_STOCK')
@@ -121,7 +142,7 @@ export default function Products() {
   const [imgUploading, setImgUploading] = useState(false)
   const imgRef = useRef()
 
-  const emptyForm = { categoryId:'', name:'', sellingPrice:'', costPrice:'', stockQuantity:'0', lowStockThreshold:'5', warrantyMonths:'', imageUrl:'', hasImei:false, imeiNumbers:'', variants:[] }
+  const emptyForm = { categoryId:'', name:'', barcode:'', sellingPrice:'', costPrice:'', stockQuantity:'0', lowStockThreshold:'5', warrantyMonths:'', imageUrl:'', hasImei:false, imeiNumbers:'', variants:[] }
   const [form, setForm] = useState(emptyForm)
 
   const load = () => api.get('/products', { params: { search: search || undefined, category: catFilter || undefined } }).then(r => setProducts(r.data))
@@ -131,7 +152,7 @@ export default function Products() {
   const openAdd = () => { setEditProduct(null); setForm(emptyForm); setShowModal(true) }
   const openEdit = p => {
     setEditProduct(p)
-    setForm({ categoryId: p.categoryId, name: p.name, sellingPrice: p.sellingPrice, costPrice: p.costPrice, stockQuantity: p.stockQuantity, lowStockThreshold: p.lowStockThreshold, warrantyMonths: p.warrantyMonths || '', imageUrl: p.imageUrl || '', hasImei: p.hasImei, imeiNumbers: '', variants: p.variants || [] })
+    setForm({ categoryId: p.categoryId, name: p.name, barcode: p.barcode || '', sellingPrice: p.sellingPrice, costPrice: p.costPrice, stockQuantity: p.stockQuantity, lowStockThreshold: p.lowStockThreshold, warrantyMonths: p.warrantyMonths || '', imageUrl: p.imageUrl || '', hasImei: p.hasImei, imeiNumbers: '', variants: p.variants || [] })
     setShowModal(true)
   }
 
@@ -145,10 +166,21 @@ export default function Products() {
   const save = async () => {
     setSaving(true)
     try {
-      const payload = { ...form, imeiNumbers: form.imeiNumbers ? form.imeiNumbers.split('\n').filter(Boolean) : [] }
-      if (editProduct) await api.patch(`/products/${editProduct.id}`, payload)
-      else await api.post('/products', payload)
-      setShowModal(false); load()
+      const payload = {
+        ...form,
+        barcode: form.barcode?.trim() || '',
+        imeiNumbers: form.imeiNumbers ? form.imeiNumbers.split('\n').map(v => v.trim()).filter(Boolean) : []
+      }
+      const response = editProduct
+        ? await api.patch(`/products/${editProduct.id}`, payload)
+        : await api.post('/products', payload)
+
+      setShowModal(false)
+      load()
+
+      if (!editProduct && response?.data?.imeiSummary) {
+        alert(`Product saved. IMEI summary: ${formatImeiSummary(response.data.imeiSummary)}`)
+      }
     } catch (e) { alert(e.response?.data?.error || 'Error saving product') } finally { setSaving(false) }
   }
 
@@ -167,7 +199,7 @@ export default function Products() {
       <div className="flex gap-3 flex-wrap">
         <div className="relative flex-1 min-w-48">
           <span className="absolute left-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-white/30 text-lg">search</span>
-          <input className="input pl-10" placeholder="Search name or SKU…" value={search} onChange={e => setSearch(e.target.value)} />
+          <input className="input pl-10" placeholder="Search name, SKU or barcode…" value={search} onChange={e => setSearch(e.target.value)} />
         </div>
         <select className="input w-48" value={catFilter} onChange={e => setCatFilter(e.target.value)}>
           <option value="">All Categories</option>
@@ -196,6 +228,7 @@ export default function Products() {
                   {lowStock && <span className="badge bg-red-500/10 text-red-400 border-red-500/20 flex-shrink-0">Low</span>}
                 </div>
                 <p className="font-mono text-brand text-xs">{p.sku}</p>
+                <p className="font-mono text-white/35 text-[11px] break-all">Barcode: {p.barcode}</p>
                 <div className="flex items-center justify-between">
                   <p className="font-display font-bold text-white text-base">LKR {Number(p.sellingPrice).toLocaleString()}</p>
                   <p className="text-white/30 text-xs">Qty: {p.stockQuantity}</p>
@@ -229,6 +262,18 @@ export default function Products() {
               <div className="col-span-2">
                 <label className="label">Product Name</label>
                 <input className="input" value={form.name} onChange={e => setForm(f => ({...f, name: e.target.value}))} placeholder="e.g. iPhone 15 Pro Max"/>
+              </div>
+              <div className="col-span-2">
+                <label className="label">Custom Barcode (optional)</label>
+                <input
+                  className="input font-mono"
+                  value={form.barcode}
+                  onChange={e => setForm(f => ({ ...f, barcode: e.target.value }))}
+                  placeholder={editProduct ? 'Edit the barcode or clear it to auto-generate a new one' : 'Leave blank to auto-generate, or enter your own barcode'}
+                />
+                <p className="text-white/35 text-xs mt-1">
+                  Owner/admin can save any barcode format here. Leave it empty to let the system create one automatically.
+                </p>
               </div>
               <div>
                 <label className="label">Selling Price (LKR)</label>

@@ -49,75 +49,133 @@ export default function Billing() {
       .then(r => setProducts(r.data))
   }, [search, catFilter])
 
+  const isLikelyImei = useCallback((value) => /^\d{14,17}$/.test(String(value || '').replace(/\D/g, '')), [])
+
+  const playScanTone = useCallback((type = 'success') => {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)()
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.connect(gain); gain.connect(ctx.destination)
+      osc.frequency.value = type === 'success' ? 1800 : 400
+      osc.type = 'square'
+      gain.gain.setValueAtTime(type === 'success' ? 0.1 : 0.2, ctx.currentTime)
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + (type === 'success' ? 0.1 : 0.3))
+      osc.start(ctx.currentTime); osc.stop(ctx.currentTime + (type === 'success' ? 0.1 : 0.3))
+    } catch (e) {}
+  }, [])
+
   const addToCart = useCallback(async (product, variantId = null) => {
-    const key = `${product.id}-${variantId || 'base'}`
-    const price = variantId
-      ? product.variants?.find(v => v.id === variantId)?.priceOverride || product.sellingPrice
+    const resolvedVariantId = variantId || product.matchedVariant?.id || null
+    const key = `${product.id}-${resolvedVariantId || 'base'}`
+    const price = resolvedVariantId
+      ? product.variants?.find(v => v.id === resolvedVariantId)?.priceOverride || product.sellingPrice
       : product.sellingPrice
 
     if (product.hasImei) {
-      // Fetch available IMEIs
+      const matchedImei = product.matchedImei || null
+
+      if (matchedImei) {
+        if (matchedImei.status !== 'IN_STOCK') {
+          return { added: false, reason: 'imei_sold', imei: matchedImei.imei }
+        }
+
+        let added = false
+        setCart(c => {
+          if (c.some(item => item.imeiId === matchedImei.id)) return c
+          added = true
+          return [...c, { key: `${product.id}-imei-${matchedImei.id}`, product, variantId: resolvedVariantId, imeiId: matchedImei.id, imeiNumber: matchedImei.imei, quantity: 1, unitPrice: Number(price) }]
+        })
+
+        return added
+          ? { added: true, reason: 'imei_added', imei: matchedImei.imei }
+          : { added: false, reason: 'already_in_cart', imei: matchedImei.imei }
+      }
+
       const { data } = await api.get(`/products/${product.id}/imei`)
       const inStock = data.filter(i => i.status === 'IN_STOCK')
-      if (inStock.length === 0) { alert('No IMEI in stock for this product!'); return }
+      if (inStock.length === 0) {
+        alert('No IMEI in stock for this product!')
+        return { added: false, reason: 'no_imei_stock' }
+      }
       setAvailableImeis(inStock)
-      setImeiSelecting({ product, variantId, price })
-      return
+      setImeiSelecting({ product, variantId: resolvedVariantId, price })
+      return { added: false, reason: 'select_imei' }
     }
 
+    let updated = false
+    let blockedByStock = false
     setCart(c => {
       const existing = c.find(i => i.key === key)
       if (existing) {
-        if (existing.quantity >= existing.product.stockQuantity) return c
+        if (existing.quantity >= existing.product.stockQuantity) {
+          blockedByStock = true
+          return c
+        }
+        updated = true
         return c.map(i => i.key === key ? { ...i, quantity: i.quantity + 1 } : i)
       }
-      return [...c, { key, product, variantId, imeiId: null, imeiNumber: null, quantity: 1, unitPrice: Number(price) }]
+      updated = true
+      return [...c, { key, product, variantId: resolvedVariantId, imeiId: null, imeiNumber: null, quantity: 1, unitPrice: Number(price) }]
     })
+
+    return updated
+      ? { added: true, reason: 'product_added' }
+      : { added: false, reason: blockedByStock ? 'max_stock' : 'unknown' }
   }, [setCart, setAvailableImeis, setImeiSelecting])
 
   const processNextScan = useCallback(async () => {
     if (isProcessing.current || scanQueue.current.length === 0) return
     isProcessing.current = true
     const barcode = scanQueue.current.shift()
+
     try {
       const { data } = await api.get('/products', { params: { barcode } })
+
       if (data.length > 0) {
         const product = data[0]
-        await addToCart(product)
-        setScanStatus({ type: 'success', name: product.name, sku: product.sku })
-        setScanFlash(true)
-        setTimeout(() => setScanFlash(false), 300)
-        try {
-          const ctx = new (window.AudioContext || window.webkitAudioContext)()
-          const osc = ctx.createOscillator()
-          const gain = ctx.createGain()
-          osc.connect(gain); gain.connect(ctx.destination)
-          osc.frequency.value = 1800; osc.type = 'square'
-          gain.gain.setValueAtTime(0.1, ctx.currentTime)
-          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1)
-          osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.1)
-        } catch(e) {}
+        const result = await addToCart(product)
+
+        if (result?.added) {
+          setScanStatus({
+            type: 'success',
+            name: product.name,
+            sku: result.imei ? `IMEI ${result.imei}` : product.sku
+          })
+          setScanFlash(true)
+          setTimeout(() => setScanFlash(false), 300)
+          playScanTone('success')
+        } else if (result?.reason === 'imei_sold') {
+          setScanStatus({ type: 'error', name: 'IMEI already sold', sku: result.imei })
+          playScanTone('error')
+        } else if (result?.reason === 'already_in_cart') {
+          setScanStatus({ type: 'error', name: 'IMEI already in cart', sku: result.imei })
+          playScanTone('error')
+        } else if (result?.reason === 'select_imei') {
+          setScanStatus({ type: 'success', name: `Select IMEI for ${product.name}`, sku: product.sku })
+          setScanFlash(true)
+          setTimeout(() => setScanFlash(false), 300)
+          playScanTone('success')
+        } else if (result?.reason === 'max_stock') {
+          setScanStatus({ type: 'error', name: 'Max stock reached', sku: product.name })
+          playScanTone('error')
+        }
       } else {
-        setScanStatus({ type: 'error', name: 'Product not found', sku: barcode })
-        try {
-          const ctx = new (window.AudioContext || window.webkitAudioContext)()
-          const osc = ctx.createOscillator()
-          const gain = ctx.createGain()
-          osc.connect(gain); gain.connect(ctx.destination)
-          osc.frequency.value = 400; osc.type = 'square'
-          gain.gain.setValueAtTime(0.2, ctx.currentTime)
-          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3)
-          osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.3)
-        } catch(e) {}
+        setScanStatus({ type: 'error', name: isLikelyImei(barcode) ? 'IMEI not registered' : 'Product not found', sku: barcode })
+        playScanTone('error')
       }
+
       setTimeout(() => setScanStatus(null), 2500)
     } catch(err) {
       console.error('Scan error:', err)
+      setScanStatus({ type: 'error', name: 'Scan failed', sku: err.response?.data?.error || barcode })
+      playScanTone('error')
+      setTimeout(() => setScanStatus(null), 2500)
     } finally {
       isProcessing.current = false
       if (scanQueue.current.length > 0) processNextScan()
     }
-  }, [addToCart])
+  }, [addToCart, isLikelyImei, playScanTone])
 
   // Barcode reader detection
   const handleBarcodeKeydown = useCallback((e) => {
@@ -175,13 +233,8 @@ export default function Billing() {
         if (code?.data) {
           stream.getTracks().forEach(t => t.stop())
           setCameraOpen(false)
-          api.get('/products', { params: { barcode: code.data } }).then(({ data }) => {
-            if (data.length > 0) {
-              addToCart(data[0])
-              setScanStatus({ type: 'success', name: data[0].name, sku: data[0].sku })
-              setTimeout(() => setScanStatus(null), 2500)
-            }
-          })
+          scanQueue.current.push(code.data)
+          processNextScan()
         } else { animId = requestAnimationFrame(scan) }
       }
       animId = requestAnimationFrame(scan)
@@ -190,12 +243,24 @@ export default function Billing() {
       cancelAnimationFrame(animId)
       if (videoRef.current?.srcObject) videoRef.current.srcObject.getTracks().forEach(t => t.stop())
     }
-  }, [cameraOpen])
+  }, [cameraOpen, processNextScan])
 
   const selectImei = (imei) => {
     const { product, variantId, price } = imeiSelecting
     const key = `${product.id}-imei-${imei.id}`
-    setCart(c => [...c, { key, product, variantId, imeiId: imei.id, imeiNumber: imei.imei, quantity: 1, unitPrice: Number(price) }])
+    let added = false
+
+    setCart(c => {
+      if (c.some(item => item.imeiId === imei.id)) return c
+      added = true
+      return [...c, { key, product, variantId, imeiId: imei.id, imeiNumber: imei.imei, quantity: 1, unitPrice: Number(price) }]
+    })
+
+    if (!added) {
+      alert(`IMEI ${imei.imei} is already in the cart`)
+      return
+    }
+
     setImeiSelecting(null)
     setAvailableImeis([])
   }
@@ -283,7 +348,7 @@ export default function Billing() {
         ) : (
           <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/3 border border-white/5 text-white/20 text-xs font-mono mb-3">
             <span className="material-symbols-outlined text-sm">barcode_scanner</span>
-            Ready to scan — point barcode reader at product
+            Ready to scan — barcode or IMEI
           </div>
         )}
 
