@@ -53,13 +53,16 @@ export default function AiWidget() {
   const handleKey = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }
 
   if (!open) return (
-    <button onClick={() => setOpen(true)} className="fixed bottom-6 right-6 w-14 h-14 bg-brand rounded-2xl flex items-center justify-center shadow-2xl shadow-brand/30 hover:scale-105 active:scale-95 transition-all z-50">
-      <span className="material-symbols-outlined text-onbrand text-2xl fill-icon">smart_toy</span>
-    </button>
+    <div style={{ position:'fixed', bottom:'24px', right:'24px', zIndex:9999 }}>
+      <button onClick={() => setOpen(true)} className="w-14 h-14 bg-brand rounded-2xl flex items-center justify-center shadow-2xl shadow-brand/30 hover:scale-105 active:scale-95 transition-all">
+        <span className="material-symbols-outlined text-onbrand text-2xl fill-icon">smart_toy</span>
+      </button>
+    </div>
   )
 
   return (
-    <div className="fixed bottom-6 right-6 w-80 h-[500px] flex flex-col bg-surface rounded-2xl border border-white/10 shadow-2xl z-50 animate-slide-up">
+    <div style={{ position:'fixed', bottom:'24px', right:'24px', zIndex:9999, maxWidth:'320px', width:'320px' }}>
+    <div className="w-full h-[500px] flex flex-col bg-surface rounded-2xl border border-white/10 shadow-2xl animate-slide-up">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-white/5">
         <div className="flex items-center gap-2">
@@ -125,6 +128,7 @@ export default function AiWidget() {
           </button>
         </div>
       </div>
+    </div>
     </div>
   )
 }

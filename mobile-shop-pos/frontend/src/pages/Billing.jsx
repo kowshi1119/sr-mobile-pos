@@ -21,6 +21,8 @@ export default function Billing() {
   const [availableImeis, setAvailableImeis] = useState([])
   const [creditSale, setCreditSale] = useState(false)
   const [creditAmount, setCreditAmount] = useState('')
+  const [showDiscount, setShowDiscount] = useState(false)
+  const [discount, setDiscount] = useState({ type: 'PERCENT', amount: 0 })
 
   const { pendingProduct, clearPendingProduct } = useScanner()
 
@@ -273,7 +275,13 @@ export default function Billing() {
   }
   const removeItem = key => setCart(c => c.filter(i => i.key !== key))
 
-  const total = cart.reduce((s, i) => s + i.unitPrice * i.quantity, 0)
+  const subtotal = cart.reduce((s, i) => s + i.unitPrice * i.quantity, 0)
+  const discountValue = discount.amount > 0
+    ? discount.type === 'PERCENT'
+      ? Math.round(subtotal * discount.amount / 100)
+      : Math.min(discount.amount, subtotal)
+    : 0
+  const total = subtotal - discountValue
 
   // Keep creditAmount in sync with total when credit sale is on
   useEffect(() => {
@@ -288,6 +296,8 @@ export default function Billing() {
         customer,
         paymentMethod,
         creditAmount: creditSale ? parseFloat(creditAmount) || 0 : 0,
+        discountAmount: discountValue,
+        discountType: discount.type === 'PERCENT' ? `${discount.amount}%` : 'FIXED',
         items: cart.map(i => ({
           productId: i.product.id,
           variantId: i.variantId || null,
@@ -296,6 +306,8 @@ export default function Billing() {
           unitPrice: i.unitPrice
         }))
       })
+      setDiscount({ type: 'PERCENT', amount: 0 })
+      setShowDiscount(false)
       navigate('/sale-success', { state: { sale: data.sale, invoiceNumber: data.invoiceNumber, qrDataUrl: data.qrDataUrl } })
     } catch (e) { alert(e.response?.data?.error || 'Sale failed'); setSubmitting(false) }
   }
@@ -390,14 +402,14 @@ export default function Billing() {
       </div>
 
       {/* Right — Cart */}
-      <div className="w-80 lg:w-96 flex flex-col p-6 bg-surface overflow-hidden">
+      <div className="w-80 lg:w-96 flex flex-col p-6 bg-surface border-l border-white/5 overflow-y-auto">
         <h2 className="font-display font-bold text-white mb-4 flex items-center gap-2">
           <span className="material-symbols-outlined text-brand fill-icon">shopping_cart</span>
           Cart <span className="badge bg-brand/10 text-brand border-brand/20">{cart.length}</span>
         </h2>
 
         {/* Cart items */}
-        <div className="flex-1 overflow-y-auto space-y-2 mb-4">
+        <div className="space-y-2 mb-4">
           {cart.length === 0 && (
             <div className="text-center py-12 text-white/20">
               <span className="material-symbols-outlined text-5xl block mb-2">shopping_cart</span>
@@ -433,7 +445,17 @@ export default function Billing() {
 
         {/* Total */}
         <div className="border-t border-white/5 pt-3 mb-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-white/40 text-sm font-body">Subtotal</span>
+            <span className="font-mono text-white/70 text-sm">LKR {subtotal.toLocaleString()}</span>
+          </div>
+          {discountValue > 0 && (
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-accent/70 text-sm font-body">Discount</span>
+              <span className="font-mono text-accent text-sm">- LKR {discountValue.toLocaleString()}</span>
+            </div>
+          )}
+          <div className="flex items-center justify-between pt-1 border-t border-white/5">
             <span className="font-display font-bold text-white/50 text-sm uppercase tracking-wider">Total</span>
             <span className="font-display font-black text-brand text-2xl">LKR {total.toLocaleString()}</span>
           </div>
@@ -449,6 +471,102 @@ export default function Billing() {
               </button>
             ))}
           </div>
+        </div>
+
+        {/* Discount — collapsed by default */}
+        <div className="mb-4">
+          {!showDiscount ? (
+            // Collapsed state — just a small link button
+            <button
+              type="button"
+              onClick={() => setShowDiscount(true)}
+              className="flex items-center gap-1.5 text-xs text-white/30 hover:text-brand transition-colors py-1 font-mono">
+              <span className="material-symbols-outlined text-sm">
+                sell
+              </span>
+              Add discount (optional)
+            </button>
+          ) : (
+            // Expanded state — full discount UI
+            <div className="border border-brand/20 rounded-xl p-4 bg-brand/5 space-y-3 animate-fade-in">
+              <div className="flex items-center justify-between">
+                <p className="text-white/60 text-sm font-body flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-sm text-brand">
+                    sell
+                  </span>
+                  Customer Discount
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowDiscount(false)
+                    setDiscount({ type: 'PERCENT', amount: 0 })
+                  }}
+                  className="text-white/30 hover:text-red-400 transition-colors text-xs font-mono flex items-center gap-1">
+                  <span className="material-symbols-outlined text-sm">
+                    close
+                  </span>
+                  Remove
+                </button>
+              </div>
+
+              {/* Type Toggle */}
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDiscount(d => ({ ...d, type: 'PERCENT' }))}
+                  className={`flex-1 py-2 rounded-lg text-xs font-mono border transition-all ${
+                    discount.type === 'PERCENT'
+                      ? 'bg-brand/10 border-brand text-brand'
+                      : 'border-white/10 text-white/40 hover:border-white/20'
+                  }`}>
+                  % Percent
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDiscount(d => ({ ...d, type: 'FIXED' }))}
+                  className={`flex-1 py-2 rounded-lg text-xs font-mono border transition-all ${
+                    discount.type === 'FIXED'
+                      ? 'bg-brand/10 border-brand text-brand'
+                      : 'border-white/10 text-white/40 hover:border-white/20'
+                  }`}>
+                  LKR Fixed
+                </button>
+              </div>
+
+              {/* Amount Input */}
+              <div className="flex items-center gap-2">
+                <span className="text-white/40 text-sm font-mono flex-shrink-0 w-8">
+                  {discount.type === 'PERCENT' ? '%' : 'LKR'}
+                </span>
+                <input
+                  type="number"
+                  min="0"
+                  max={discount.type === 'PERCENT' ? 100 : subtotal}
+                  className="input text-sm py-2 flex-1"
+                  placeholder={discount.type === 'PERCENT' ? 'e.g. 10' : 'e.g. 500'}
+                  value={discount.amount || ''}
+                  onChange={e => {
+                    const val = parseFloat(e.target.value) || 0
+                    const max = discount.type === 'PERCENT' ? 100 : subtotal
+                    setDiscount(d => ({ ...d, amount: Math.min(val, max) }))
+                  }}
+                />
+              </div>
+
+              {/* Live preview */}
+              {discount.amount > 0 && (
+                <div className="flex items-center justify-between px-3 py-2 bg-brand/10 rounded-lg">
+                  <span className="text-brand/70 text-xs font-mono">
+                    You save:
+                  </span>
+                  <span className="text-brand font-mono font-bold text-sm">
+                    - LKR {discountValue.toLocaleString()}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Customer */}

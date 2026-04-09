@@ -6,6 +6,7 @@ import AiWidget from './AiWidget'
 
 const NAV = [
   { to: '/dashboard',    icon: 'dashboard',     label: 'Dashboard' },
+  { to: '/analytics',    icon: 'bar_chart',     label: 'Analytics' },
   { to: '/billing',      icon: 'point_of_sale', label: 'New Sale' },
   { to: '/products',     icon: 'inventory_2',   label: 'Products' },
   { to: '/categories',   icon: 'category',      label: 'Categories' },
@@ -46,7 +47,7 @@ function LayoutInner() {
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 px-2 py-4 space-y-0.5 overflow-y-auto">
+        <nav className="flex-1 px-2 py-4 space-y-0.5 overflow-y-auto overflow-hidden">
           {NAV.map(n => (
             <NavLink key={n.to} to={n.to} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''} ${!sideOpen ? 'justify-center px-2' : ''}`}>
               <span className="material-symbols-outlined text-xl flex-shrink-0">{n.icon}</span>

@@ -12,6 +12,7 @@ import CustomerDetail from './pages/CustomerDetail'
 import Repairs from './pages/Repairs'
 import RepairDetail from './pages/RepairDetail'
 import Notifications from './pages/Notifications'
+import Analytics from './pages/Analytics'
 import PublicInvoice from './pages/PublicInvoice'
 
 function PrivateRoute({ children }) {
@@ -30,6 +31,7 @@ export default function App() {
           <Route path="/" element={<PrivateRoute><Layout /></PrivateRoute>}>
             <Route index element={<Navigate to="/dashboard" replace />} />
             <Route path="dashboard" element={<Dashboard />} />
+            <Route path="analytics" element={<Analytics />} />
             <Route path="products" element={<Products />} />
             <Route path="categories" element={<Categories />} />
             <Route path="billing" element={<Billing />} />

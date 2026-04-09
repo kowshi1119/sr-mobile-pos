@@ -26,7 +26,7 @@ export default function Categories() {
   const toggle = async (c) => { await api.patch(`/categories/${c.id}`, { isActive: !c.isActive }); load() }
 
   return (
-    <div className="space-y-5 max-w-3xl">
+    <div className="relative z-10 space-y-5 max-w-3xl">
       <div className="flex items-center justify-between">
         <div><h1 className="font-display font-bold text-2xl text-white">Categories</h1>
           <p className="text-white/30 text-sm font-mono">{cats.length} categories</p></div>
@@ -64,8 +64,8 @@ export default function Categories() {
         {cats.map(c => (
           <div key={c.id} className={`flex items-center justify-between px-5 py-4 ${!c.isActive ? 'opacity-40' : ''}`}>
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 bg-brand/10 rounded-lg flex items-center justify-center">
-                <span className="material-symbols-outlined text-brand text-lg">{c.icon || 'category'}</span>
+              <div className="w-9 h-9 bg-brand/10 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden">
+                <span className="material-symbols-outlined text-brand" style={{ fontSize:'20px', lineHeight:'1' }}>{c.icon || 'category'}</span>
               </div>
               <div>
                 <p className="font-body font-medium text-white">{c.name}</p>

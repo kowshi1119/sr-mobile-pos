@@ -142,6 +142,12 @@ export default function SaleSuccess() {
                 <span>Subtotal</span>
                 <span className="font-mono">{subtotal.toLocaleString('en-LK',{minimumFractionDigits:2})}</span>
               </div>
+              {Number(sale.discountAmount) > 0 && (
+                <div className="flex justify-between text-sm text-green-600">
+                  <span>Discount ({sale.discountType})</span>
+                  <span className="font-mono">- {Number(sale.discountAmount).toLocaleString('en-LK',{minimumFractionDigits:2})}</span>
+                </div>
+              )}
               <div className="pt-3 border-t-2 border-gray-800 flex justify-between items-baseline">
                 <span className="font-bold text-sm uppercase tracking-tight text-gray-800">Net Total (LKR)</span>
                 <span className="font-display font-black text-2xl text-brand">{Number(sale.totalAmount).toLocaleString('en-LK',{minimumFractionDigits:2})}</span>
