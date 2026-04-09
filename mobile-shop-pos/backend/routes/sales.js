@@ -17,7 +17,7 @@ async function getNextInvoiceNumber() {
 
 // POST /api/sales — Complete sale transaction
 router.post('/', auth, async (req, res) => {
-  const { customer: customerData, items, paymentMethod, creditAmount } = req.body;
+  const { customer: customerData, items, paymentMethod, creditAmount, discountAmount, discountType } = req.body;
 
   try {
     const result = await prisma.$transaction(async (tx) => {
@@ -60,7 +60,9 @@ router.post('/', auth, async (req, res) => {
       const invoiceNumber = await getNextInvoiceNumber();
 
       // 3. Calculate total
-      const totalAmount = items.reduce((sum, item) => sum + (parseFloat(item.unitPrice) * item.quantity), 0);
+      const itemsTotal = items.reduce((sum, item) => sum + (parseFloat(item.unitPrice) * item.quantity), 0);
+      const appliedDiscount = parseFloat(discountAmount) || 0;
+      const totalAmount = Math.max(0, itemsTotal - appliedDiscount);
 
       // 4. Create sale
       const sale = await tx.sale.create({
@@ -68,6 +70,8 @@ router.post('/', auth, async (req, res) => {
           customerId: customer.id,
           invoiceNumber,
           totalAmount,
+          discountAmount: appliedDiscount,
+          discountType: discountType || 'NONE',
           paymentMethod
         }
       });

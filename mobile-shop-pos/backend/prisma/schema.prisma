@@ -16,6 +16,7 @@ model Customer {
   whatsappNumber  String?
   whatsappOptIn   Boolean        @default(false)
   totalDebt       Decimal        @default(0) @db.Decimal(10, 2)
+  isActive        Boolean        @default(true)
   createdAt       DateTime       @default(now())
   sales           Sale[]
   repairs         Repair[]
@@ -84,6 +85,8 @@ model Sale {
   customerId      String
   invoiceNumber   String           @unique
   totalAmount     Decimal          @db.Decimal(10, 2)
+  discountAmount  Float            @default(0)
+  discountType    String           @default("NONE")
   paymentMethod   PaymentMethod
   createdAt       DateTime         @default(now())
   customer        Customer         @relation(fields: [customerId], references: [id])
