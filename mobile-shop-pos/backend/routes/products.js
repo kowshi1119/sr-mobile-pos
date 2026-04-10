@@ -280,6 +280,26 @@ router.delete('/:id', auth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// GET /api/products/:id/label-data
+router.get('/:id/label-data', auth, async (req, res) => {
+  try {
+    const product = await prisma.product.findUnique({
+      where: { id: req.params.id },
+      include: { category: true }
+    });
+    if (!product) return res.status(404).json({ error: 'Not found' });
+    res.json({
+      id: product.id,
+      name: product.name,
+      sku: product.sku,
+      barcode: product.barcode,
+      price: product.sellingPrice,
+      qty: parseInt(req.query.qty) || 1,
+      category: product.category?.name || ''
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // GET /api/products/:id — Single product by ID (used by global QR scanner)
 router.get('/:id', auth, async (req, res) => {
   try {

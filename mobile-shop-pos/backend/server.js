@@ -27,6 +27,14 @@ app.use('/api/dashboard', require('./routes/dashboard'));
 app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/ai', require('./routes/ai'));
 app.use('/api/debt', require('./routes/debt'));
+app.use('/api/loyalty', require('./routes/loyalty'));
+app.use('/api/suppliers', require('./routes/suppliers'));
+app.use('/api/expenses', require('./routes/expenses'));
+app.use('/api/targets', require('./routes/targets'));
+app.use('/api/bundles', require('./routes/bundles'));
+app.use('/api/reminders', require('./routes/reminders'));
+app.use('/api/whatsapp-summary', require('./routes/whatsapp-summary'));
+app.use('/api/data', require('./routes/data'));
 
 // 404
 app.use((req, res) => res.status(404).json({ error: 'Route not found' }));

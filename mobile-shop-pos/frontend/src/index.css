@@ -3,12 +3,46 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    --color-brand: 232 160 32;
+    --color-brand-dark: 196 136 10;
+    --color-brand-light: 255 208 112;
+    --color-onbrand: 26 14 0;
+    --color-accent: 78 222 163;
+    --color-surface: 19 19 19;
+    --color-surface-low: 28 27 27;
+    --color-surface-high: 42 42 42;
+    --color-surface-highest: 53 53 52;
+    --color-surface-lowest: 14 14 14;
+    --color-text: 229 226 225;
+  }
+
+  html { color-scheme: dark; }
+
+  html.light {
+    color-scheme: light;
+    --color-surface: 255 250 243;
+    --color-surface-low: 249 243 233;
+    --color-surface-high: 242 233 219;
+    --color-surface-highest: 228 216 197;
+    --color-surface-lowest: 247 242 234;
+    --color-text: 31 24 17;
+  }
+
   * { box-sizing: border-box; }
-  body { background: #0E0E0E; color: #E5E2E1; font-family: 'DM Sans', sans-serif; }
+  body {
+    background: rgb(var(--color-surface-lowest));
+    color: rgb(var(--color-text));
+    font-family: 'DM Sans', sans-serif;
+    transition: background-color .2s ease, color .2s ease;
+  }
   ::-webkit-scrollbar { width: 4px; height: 4px; }
-  ::-webkit-scrollbar-track { background: #131313; }
-  ::-webkit-scrollbar-thumb { background: #353534; border-radius: 2px; }
-  input, textarea, select { background: #1C1B1B !important; color: #E5E2E1 !important; }
+  ::-webkit-scrollbar-track { background: rgb(var(--color-surface)); }
+  ::-webkit-scrollbar-thumb { background: rgb(var(--color-surface-highest)); border-radius: 2px; }
+  input, textarea, select {
+    background: rgb(var(--color-surface-low)) !important;
+    color: rgb(var(--color-text)) !important;
+  }
 }
 
 @layer components {
@@ -47,6 +81,41 @@
   line-height: 1;
 }
 .fill-icon { font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+
+html.light .card {
+  box-shadow: 0 10px 30px rgba(109, 76, 16, 0.08);
+}
+html.light .btn-ghost {
+  border-color: rgba(109, 76, 16, 0.14);
+  color: rgba(31, 24, 17, 0.74);
+}
+html.light .btn-ghost:hover {
+  background: rgba(232, 160, 32, 0.08);
+  color: rgb(31, 24, 17);
+}
+html.light .nav-item {
+  color: rgba(31, 24, 17, 0.72);
+}
+html.light .nav-item:hover {
+  color: rgb(31, 24, 17);
+  background: rgba(232, 160, 32, 0.08);
+}
+html.light .nav-item.active {
+  background: rgba(232, 160, 32, 0.12);
+}
+html.light .text-white { color: rgb(31, 24, 17) !important; }
+html.light [class*='text-white/70'] { color: rgba(31, 24, 17, 0.74) !important; }
+html.light [class*='text-white/60'] { color: rgba(31, 24, 17, 0.68) !important; }
+html.light [class*='text-white/50'] { color: rgba(31, 24, 17, 0.60) !important; }
+html.light [class*='text-white/40'] { color: rgba(31, 24, 17, 0.52) !important; }
+html.light [class*='text-white/30'] { color: rgba(31, 24, 17, 0.44) !important; }
+html.light [class*='text-white/20'] { color: rgba(31, 24, 17, 0.30) !important; }
+html.light [class*='border-white/5'] { border-color: rgba(109, 76, 16, 0.08) !important; }
+html.light [class*='border-white/10'] { border-color: rgba(109, 76, 16, 0.14) !important; }
+html.light [class*='bg-white/3'],
+html.light [class*='bg-white/5'] {
+  background: rgba(232, 160, 32, 0.06) !important;
+}
 
 /* Status badge colours */
 .status-received    { @apply bg-blue-500/10 text-blue-400 border border-blue-500/20; }

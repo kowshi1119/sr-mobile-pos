@@ -22,6 +22,7 @@ model Customer {
   repairs         Repair[]
   notifications   Notification[]
   debtRecords     DebtRecord[]
+  loyaltyAccount  LoyaltyAccount?
 }
 
 model Category {
@@ -54,6 +55,7 @@ model Product {
   saleItems          SaleItem[]
   imeiRecords        ImeiRecord[]
   warrantyRecords    WarrantyRecord[]
+  bundleItems        BundleItem[]
 }
 
 model ProductVariant {
@@ -215,4 +217,110 @@ model DebtRecord {
 enum DebtType {
   CREDIT
   PAYMENT
+}
+
+model LoyaltyAccount {
+  id            String               @id @default(uuid())
+  customerId    String               @unique
+  points        Int                  @default(0)
+  totalEarned   Int                  @default(0)
+  totalRedeemed Int                  @default(0)
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+  customer      Customer             @relation(fields: [customerId], references: [id])
+  transactions  LoyaltyTransaction[]
+}
+
+model LoyaltyTransaction {
+  id          String         @id @default(uuid())
+  accountId   String
+  type        String
+  points      Int
+  description String?
+  saleId      String?
+  createdAt   DateTime       @default(now())
+  account     LoyaltyAccount @relation(fields: [accountId], references: [id])
+}
+
+model Supplier {
+  id        String             @id @default(uuid())
+  name      String
+  phone     String?
+  email     String?
+  address   String?
+  notes     String?
+  isActive  Boolean            @default(true)
+  createdAt DateTime           @default(now())
+  purchases SupplierPurchase[]
+}
+
+model SupplierPurchase {
+  id          String                 @id @default(uuid())
+  supplierId  String
+  invoiceRef  String?
+  totalAmount Float                  @default(0)
+  notes       String?
+  purchasedAt DateTime               @default(now())
+  createdAt   DateTime               @default(now())
+  supplier    Supplier               @relation(fields: [supplierId], references: [id])
+  items       SupplierPurchaseItem[]
+}
+
+model SupplierPurchaseItem {
+  id          String           @id @default(uuid())
+  purchaseId  String
+  productId   String?
+  productName String
+  quantity    Float
+  unitCost    Float
+  totalCost   Float
+  purchase    SupplierPurchase @relation(fields: [purchaseId], references: [id])
+}
+
+model Expense {
+  id          String   @id @default(uuid())
+  category    String
+  description String
+  amount      Float
+  date        DateTime @default(now())
+  createdAt   DateTime @default(now())
+}
+
+model SalesTarget {
+  id           String   @id @default(uuid())
+  year         Int
+  month        Int
+  targetAmount Float
+  notes        String?
+  createdAt    DateTime @default(now())
+
+  @@unique([year, month])
+}
+
+model Bundle {
+  id          String       @id @default(uuid())
+  name        String
+  description String?
+  bundlePrice Float
+  isActive    Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  items       BundleItem[]
+}
+
+model BundleItem {
+  id        String  @id @default(uuid())
+  bundleId  String
+  productId String
+  quantity  Int     @default(1)
+  bundle    Bundle  @relation(fields: [bundleId], references: [id])
+  product   Product @relation(fields: [productId], references: [id])
+}
+
+model OfflineSale {
+  id        String   @id @default(uuid())
+  localId   String   @unique
+  payload   String
+  synced    Boolean  @default(false)
+  syncedAt  DateTime?
+  createdAt DateTime @default(now())
 }

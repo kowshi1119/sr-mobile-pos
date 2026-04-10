@@ -185,6 +185,42 @@ router.post('/', auth, async (req, res) => {
       } catch (e) { console.error('WhatsApp notification failed:', e.message); }
     });
 
+    // Auto-earn loyalty points after sale
+    setImmediate(async () => {
+      try {
+        if (result.customer?.id) {
+          const pts = Math.floor(Number(result.sale.totalAmount) * (10 / 1000))
+          if (pts > 0) {
+            let acc = await prisma.loyaltyAccount.findUnique({
+              where: { customerId: result.customer.id }
+            })
+            if (!acc) {
+              acc = await prisma.loyaltyAccount.create({
+                data: { customerId: result.customer.id }
+              })
+            }
+            await prisma.loyaltyAccount.update({
+              where: { id: acc.id },
+              data: {
+                points: { increment: pts },
+                totalEarned: { increment: pts },
+                transactions: {
+                  create: {
+                    type: 'EARN',
+                    points: pts,
+                    description: `Sale ${result.invoiceNumber}`,
+                    saleId: result.sale.id
+                  }
+                }
+              }
+            })
+          }
+        }
+      } catch (loyaltyErr) {
+        console.error('Loyalty earn error:', loyaltyErr.message)
+      }
+    })
+
     res.status(201).json({
       sale: result.sale,
       invoiceNumber: result.invoiceNumber,

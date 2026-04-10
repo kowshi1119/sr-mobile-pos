@@ -7,11 +7,19 @@ export default function SaleSuccess() {
   const navigate = useNavigate()
   const [fullSale, setFullSale] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [loyaltyInfo, setLoyaltyInfo] = useState(null)
 
   useEffect(() => {
     if (!state?.sale) { navigate('/billing'); return }
     api.get(`/sales/${state.sale.id}`)
-      .then(r => setFullSale(r.data))
+      .then(r => {
+        setFullSale(r.data)
+        if (r.data.customer?.id) {
+          api.get(`/loyalty/customer/${r.data.customer.id}`)
+            .then(lr => setLoyaltyInfo(lr.data))
+            .catch(() => {})
+        }
+      })
       .catch(() => setFullSale(state.sale))
       .finally(() => setLoading(false))
   }, [])
@@ -155,6 +163,13 @@ export default function SaleSuccess() {
             </div>
           </div>
         </div>
+
+        {loyaltyInfo && (
+          <div className="px-6 py-3 border-t border-gray-200 flex items-center justify-between">
+            <p className="text-xs text-gray-500 font-mono">⭐ Loyalty Points Balance:</p>
+            <p className="text-xs font-mono font-bold text-gray-700">{loyaltyInfo.points} points</p>
+          </div>
+        )}
 
         <div className="p-8 text-center border-t border-gray-200">
           {qrDataUrl && (

@@ -19,6 +19,7 @@ export default function Analytics() {
   const [products, setProducts] = useState(null)
   const [trends, setTrends] = useState(null)
   const [customers, setCustomers] = useState(null)
+  const [expMonthly, setExpMonthly] = useState([])
   const [selectedMonth, setSelectedMonth] = useState(null)
   const [productTab, setProductTab] = useState('revenue')
   const [suggestions, setSuggestions] = useState([])
@@ -26,17 +27,20 @@ export default function Analytics() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [m, p, t, c] = await Promise.all([
+      const [m, p, t, c, expRes] = await Promise.all([
         api.get(`/dashboard/analytics/monthly?year=${year}`).then(r => r.data),
         api.get('/dashboard/analytics/products').then(r => r.data),
         api.get('/dashboard/analytics/trends?days=30').then(r => r.data),
         api.get('/dashboard/analytics/customers').then(r => r.data),
+        api.get(`/expenses/summary/monthly?year=${year}`).catch(() => ({ data: [] }))
       ])
+      const expenseData = expRes.data || []
       setMonthly(m)
       setProducts(p)
       setTrends(t)
       setCustomers(c)
-      buildSuggestions(m, p, t, c)
+      setExpMonthly(expenseData)
+      buildSuggestions(m, p, t, c, expenseData)
     } catch (e) {
       console.error('Analytics load error:', e)
     } finally { setLoading(false) }
@@ -44,7 +48,7 @@ export default function Analytics() {
 
   useEffect(() => { load() }, [load])
 
-  function buildSuggestions(m, p, t, c) {
+  function buildSuggestions(m, p, t, c, expenses = []) {
     const list = []
     if (!m || !p) return
     const best = m.months.reduce((b, x) => x.revenue > (b?.revenue || 0) ? x : b, null)
@@ -72,6 +76,10 @@ export default function Analytics() {
     const debt = c?.debtSummary?.totalDebt || 0
     if (debt > 10000) {
       list.push({ type: 'warning', icon: '💳', title: `LKR ${fmtShort(debt)} outstanding debt`, text: `${c.debtSummary.customersWithDebt} customers owe a total of ${fmt(debt)}. Follow up to collect payments.`, action: '/customers', actionLabel: 'View Debtors' })
+    }
+    const annualExpenses = expenses.reduce((s, m) => s + Number(m.total || 0), 0)
+    if (annualExpenses > 0) {
+      list.push({ type: 'info', icon: '🧾', title: `Annual expenses at ${fmtShort(annualExpenses)}`, text: `Track spending closely against sales performance to protect your real net margin.`, action: '/expenses', actionLabel: 'View Expenses' })
     }
     if (best && best.revenue > 0) {
       const thisMonth = new Date().getMonth() + 1
@@ -144,10 +152,11 @@ export default function Analytics() {
       </div>
 
       {/* SUMMARY CARDS */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         {[
           { label: 'Annual Revenue', value: fmt(yt.revenue), icon: 'payments', color: 'brand' },
           { label: 'Annual Profit', value: fmt(yt.profit), icon: 'trending_up', color: 'accent' },
+          { label: 'Annual Expenses', value: fmt(expMonthly.reduce((s, m) => s + Number(m.total || 0), 0)), icon: 'receipt', color: 'brand' },
           { label: 'Profit Margin', value: `${yt.profitMargin || 0}%`, icon: 'percent', color: 'brand' },
           { label: 'Total Orders', value: yt.orders || 0, icon: 'receipt_long', color: 'accent' },
         ].map(c => (
@@ -216,11 +225,13 @@ export default function Analytics() {
                 <span className="material-symbols-outlined text-lg">close</span>
               </button>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {[
                 { label: 'Revenue', value: fmt(selectedMonth.revenue) },
                 { label: 'Cost of Goods', value: fmt(selectedMonth.costOfGoods) },
                 { label: 'Gross Profit', value: fmt(selectedMonth.grossProfit), green: true },
+                { label: 'Expenses', value: fmt(expMonthly.find(m => m.monthNum === selectedMonth.monthNum)?.total || 0) },
+                { label: 'Net After Expenses', value: fmt(selectedMonth.grossProfit - (expMonthly.find(m => m.monthNum === selectedMonth.monthNum)?.total || 0)), green: (selectedMonth.grossProfit - (expMonthly.find(m => m.monthNum === selectedMonth.monthNum)?.total || 0)) >= 0 },
                 { label: 'Profit Margin', value: `${selectedMonth.profitMargin}%`, green: selectedMonth.profitMargin > 20 },
                 { label: 'Orders', value: selectedMonth.ordersCount },
                 { label: 'Avg Order', value: fmt(selectedMonth.avgOrderValue) },

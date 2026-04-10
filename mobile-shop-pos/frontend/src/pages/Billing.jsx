@@ -23,6 +23,11 @@ export default function Billing() {
   const [creditAmount, setCreditAmount] = useState('')
   const [showDiscount, setShowDiscount] = useState(false)
   const [discount, setDiscount] = useState({ type: 'PERCENT', amount: 0 })
+  const [loyaltyAccount, setLoyaltyAccount] = useState(null)
+  const [redeemPoints, setRedeemPoints] = useState(0)
+  const [showLoyalty, setShowLoyalty] = useState(false)
+  const [bundles, setBundles] = useState([])
+  const [showBundles, setShowBundles] = useState(false)
 
   const { pendingProduct, clearPendingProduct } = useScanner()
 
@@ -51,6 +56,10 @@ export default function Billing() {
       .then(r => setProducts(r.data))
   }, [search, catFilter])
 
+  useEffect(() => {
+    api.get('/bundles').then(r => setBundles(r.data)).catch(() => setBundles([]))
+  }, [])
+
   const isLikelyImei = useCallback((value) => /^\d{14,17}$/.test(String(value || '').replace(/\D/g, '')), [])
 
   const playScanTone = useCallback((type = 'success') => {
@@ -66,6 +75,40 @@ export default function Billing() {
       osc.start(ctx.currentTime); osc.stop(ctx.currentTime + (type === 'success' ? 0.1 : 0.3))
     } catch (e) {}
   }, [])
+
+  const fetchLoyalty = async (customerId) => {
+    if (!customerId) return
+    try {
+      const { data } = await api.get(`/loyalty/customer/${customerId}`)
+      setLoyaltyAccount(data)
+    } catch (_) {}
+  }
+
+  const addBundleToCart = (bundle) => {
+    bundle.items.forEach(item => {
+      if (!item.product) return
+      const key = `bundle-${bundle.id}-${item.product.id}`
+      setCart(c => {
+        const exists = c.find(i => i.key === key)
+        if (exists) {
+          return c.map(i => i.key === key
+            ? { ...i, quantity: i.quantity + item.quantity }
+            : i
+          )
+        }
+        return [...c, {
+          key,
+          product: item.product,
+          variantId: null,
+          imeiId: null,
+          imeiNumber: null,
+          quantity: item.quantity,
+          unitPrice: Number(bundle.bundlePrice) /
+            Math.max(1, bundle.items.reduce((s, bi) => s + bi.quantity, 0))
+        }]
+      })
+    })
+  }
 
   const addToCart = useCallback(async (product, variantId = null) => {
     const resolvedVariantId = variantId || product.matchedVariant?.id || null
@@ -276,12 +319,13 @@ export default function Billing() {
   const removeItem = key => setCart(c => c.filter(i => i.key !== key))
 
   const subtotal = cart.reduce((s, i) => s + i.unitPrice * i.quantity, 0)
-  const discountValue = discount.amount > 0
+  const loyaltyDiscount = redeemPoints || 0
+  const discountValue = (discount.amount > 0
     ? discount.type === 'PERCENT'
       ? Math.round(subtotal * discount.amount / 100)
       : Math.min(discount.amount, subtotal)
-    : 0
-  const total = subtotal - discountValue
+    : 0) + loyaltyDiscount
+  const total = Math.max(0, subtotal - discountValue)
 
   // Keep creditAmount in sync with total when credit sale is on
   useEffect(() => {
@@ -297,7 +341,7 @@ export default function Billing() {
         paymentMethod,
         creditAmount: creditSale ? parseFloat(creditAmount) || 0 : 0,
         discountAmount: discountValue,
-        discountType: discount.type === 'PERCENT' ? `${discount.amount}%` : 'FIXED',
+        discountType: discount.type === 'PERCENT' ? `${discount.amount}%` : (redeemPoints > 0 ? `FIXED + ${redeemPoints}pts` : 'FIXED'),
         items: cart.map(i => ({
           productId: i.product.id,
           variantId: i.variantId || null,
@@ -306,10 +350,49 @@ export default function Billing() {
           unitPrice: i.unitPrice
         }))
       })
+
+      if (redeemPoints > 0 && loyaltyAccount?.customerId) {
+        try {
+          await api.post('/loyalty/redeem', {
+            customerId: loyaltyAccount.customerId,
+            pointsToRedeem: redeemPoints
+          })
+        } catch (_) {}
+      }
+
       setDiscount({ type: 'PERCENT', amount: 0 })
       setShowDiscount(false)
+      setLoyaltyAccount(null)
+      setRedeemPoints(0)
+      setShowLoyalty(false)
       navigate('/sale-success', { state: { sale: data.sale, invoiceNumber: data.invoiceNumber, qrDataUrl: data.qrDataUrl } })
     } catch (e) { alert(e.response?.data?.error || 'Sale failed'); setSubmitting(false) }
+  }
+
+  const handlePhoneChange = async (value) => {
+    setCustomer(c => ({ ...c, phone: value }))
+    if (value.length >= 10) {
+      try {
+        const { data } = await api.get('/customers', { params: { search: value } })
+        if (data.length > 0) {
+          fetchLoyalty(data[0].id)
+          setCustomer(c => ({
+            ...c,
+            name: c.name || data[0].name || c.name,
+            whatsappNumber: c.whatsappNumber || data[0].whatsappNumber || c.whatsappNumber,
+            whatsappOptIn: data[0].whatsappOptIn ?? c.whatsappOptIn
+          }))
+        } else {
+          setLoyaltyAccount(null)
+          setRedeemPoints(0)
+          setShowLoyalty(false)
+        }
+      } catch (_) {}
+    } else {
+      setLoyaltyAccount(null)
+      setRedeemPoints(0)
+      setShowLoyalty(false)
+    }
   }
 
   useEffect(() => {
@@ -377,22 +460,60 @@ export default function Billing() {
           </select>
         </div>
 
-        <div className="flex-1 overflow-y-auto grid grid-cols-2 lg:grid-cols-3 gap-3 content-start">
-          {products.map(p => (
-            <button key={p.id} onClick={() => addToCart(p)} className="card p-3 text-left hover:border-brand/30 hover:bg-brand/5 active:scale-95 transition-all group">
-              {p.imageUrl ? (
-                <img src={p.imageUrl} alt={p.name} className="w-full h-24 object-cover rounded-lg mb-2 group-hover:scale-105 transition-transform"/>
-              ) : (
-                <div className="w-full h-24 bg-surface-high rounded-lg mb-2 flex items-center justify-center">
-                  <span className="material-symbols-outlined text-white/10 text-3xl">inventory_2</span>
-                </div>
-              )}
-              <p className="text-white text-xs font-body font-medium leading-tight mb-1 line-clamp-2">{p.name}</p>
-              <p className="font-display font-bold text-brand text-sm">LKR {Number(p.sellingPrice).toLocaleString()}</p>
-              <p className={`text-xs font-mono mt-0.5 ${p.stockQuantity <= p.lowStockThreshold ? 'text-red-400' : 'text-white/20'}`}>Qty: {p.stockQuantity}</p>
-            </button>
-          ))}
+        {/* Bundle tab toggle */}
+        <div className="flex gap-2 mb-3">
+          <button
+            onClick={() => setShowBundles(false)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-mono border transition-all ${!showBundles ? 'bg-brand/10 border-brand text-brand' : 'border-white/10 text-white/40'}`}>
+            Products
+          </button>
+          <button
+            onClick={() => setShowBundles(true)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-mono border transition-all ${showBundles ? 'bg-brand/10 border-brand text-brand' : 'border-white/10 text-white/40'}`}>
+            📦 Bundles ({bundles.length})
+          </button>
         </div>
+
+        {showBundles ? (
+          <div className="flex-1 overflow-y-auto grid grid-cols-2 gap-3 content-start">
+            {bundles.map(bundle => (
+              <div key={bundle.id}
+                   onClick={() => addBundleToCart(bundle)}
+                   className="card p-3 cursor-pointer hover:border-brand/40 hover:bg-brand/5 active:scale-95 transition-all">
+                <p className="text-white text-xs font-body font-medium mb-1">📦 {bundle.name}</p>
+                <p className="text-white/30 text-xs font-mono mb-1">{bundle.items.length} items</p>
+                <p className="font-display font-bold text-brand text-sm">LKR {Number(bundle.bundlePrice).toLocaleString()}</p>
+                {(() => {
+                  const orig = bundle.items.reduce((s, i) => s + Number(i.product?.sellingPrice || 0) * i.quantity, 0)
+                  const save = orig - bundle.bundlePrice
+                  return save > 0 ? (
+                    <p className="text-accent text-xs font-mono">Save LKR {save.toLocaleString()}</p>
+                  ) : null
+                })()}
+              </div>
+            ))}
+            {bundles.length === 0 && (
+              <div className="col-span-2 card p-5 text-center text-white/20 font-mono text-sm">No bundles created yet</div>
+            )}
+          </div>
+        ) : (
+          <div className="flex-1 overflow-y-auto grid grid-cols-2 lg:grid-cols-3 gap-3 content-start">
+            {products.map(p => (
+              <button key={p.id} onClick={() => addToCart(p)} className="card p-3 text-left hover:border-brand/30 hover:bg-brand/5 active:scale-95 transition-all group">
+                {p.imageUrl ? (
+                  <img src={p.imageUrl} alt={p.name} className="w-full h-24 object-cover rounded-lg mb-2 group-hover:scale-105 transition-transform"/>
+                ) : (
+                  <div className="w-full h-24 bg-surface-high rounded-lg mb-2 flex items-center justify-center">
+                    <span className="material-symbols-outlined text-white/10 text-3xl">inventory_2</span>
+                  </div>
+                )}
+                <p className="text-white text-xs font-body font-medium leading-tight mb-1 line-clamp-2">{p.name}</p>
+                <p className="font-display font-bold text-brand text-sm">LKR {Number(p.sellingPrice).toLocaleString()}</p>
+                <p className={`text-xs font-mono mt-0.5 ${p.stockQuantity <= p.lowStockThreshold ? 'text-red-400' : 'text-white/20'}`}>Qty: {p.stockQuantity}</p>
+              </button>
+            ))}
+          </div>
+        )}
         <div className="flex gap-4 text-xs font-mono text-white/20 pt-2 border-t border-white/5 mt-2">
           <span>F2 Search</span>
           <span>F4 Camera</span>
@@ -569,11 +690,59 @@ export default function Billing() {
           )}
         </div>
 
+        {loyaltyAccount && loyaltyAccount.points > 0 && (
+          <div className="border border-accent/20 rounded-xl p-4 bg-accent/5 space-y-2 animate-fade-in mb-4">
+            <div className="flex items-center justify-between">
+              <p className="text-accent text-sm font-body flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-sm fill-icon">stars</span>
+                Loyalty Points
+              </p>
+              <span className="font-mono font-bold text-accent">{loyaltyAccount.points} pts</span>
+            </div>
+            {!showLoyalty ? (
+              <button
+                type="button"
+                onClick={() => setShowLoyalty(true)}
+                className="text-xs text-white/30 hover:text-accent transition-colors font-mono">
+                Redeem points (1 pt = LKR 1)
+              </button>
+            ) : (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="0"
+                    max={loyaltyAccount.points}
+                    className="input text-sm py-1.5 flex-1"
+                    placeholder="Points to redeem"
+                    value={redeemPoints || ''}
+                    onChange={e => {
+                      const v = Math.min(parseInt(e.target.value) || 0, loyaltyAccount.points)
+                      setRedeemPoints(v)
+                    }}
+                  />
+                  <button type="button"
+                    onClick={() => {
+                      setRedeemPoints(0)
+                      setShowLoyalty(false)
+                    }}
+                    className="text-white/30 hover:text-red-400 text-xs font-mono">
+                    Cancel
+                  </button>
+                </div>
+                {redeemPoints > 0 && (
+                  <p className="text-accent text-xs font-mono">Discount: LKR {redeemPoints.toLocaleString()}</p>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Customer */}
         <div className="space-y-2 mb-4">
           <label className="label">Customer Info <span className="text-white/20 font-normal">(optional)</span></label>
           <input className="input text-sm py-2" placeholder="Customer name" value={customer.name} onChange={e => setCustomer(c => ({...c, name: e.target.value}))}/>
-          <input className="input text-sm py-2" placeholder="Phone number" value={customer.phone} onChange={e => setCustomer(c => ({...c, phone: e.target.value}))}/>
+          <input className="input text-sm py-2" placeholder="Phone number" value={customer.phone} onChange={e => handlePhoneChange(e.target.value)}/>
           <input className="input text-sm py-2" placeholder="WhatsApp number (if different)" value={customer.whatsappNumber} onChange={e => setCustomer(c => ({...c, whatsappNumber: e.target.value}))}/>
           <label className="flex items-center gap-2 cursor-pointer">
             <input type="checkbox" className="w-4 h-4 accent-brand" checked={customer.whatsappOptIn} onChange={e => setCustomer(c => ({...c, whatsappOptIn: e.target.checked}))}/>

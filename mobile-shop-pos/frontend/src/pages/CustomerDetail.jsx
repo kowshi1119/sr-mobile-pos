@@ -9,6 +9,7 @@ export default function CustomerDetail() {
   const [editing, setEditing] = useState(false)
   const [form, setForm] = useState({})
   const [saving, setSaving] = useState(false)
+  const [loyalty, setLoyalty] = useState(null)
 
   // Debt state
   const [debtData, setDebtData] = useState({ records: [], totalDebt: 0 })
@@ -24,7 +25,13 @@ export default function CustomerDetail() {
     setDebtLoading(true)
     api.get(`/debt/${id}`).then(r => setDebtData(r.data)).catch(() => {}).finally(() => setDebtLoading(false))
   }
-  useEffect(() => { load(); loadDebt() }, [id])
+  useEffect(() => {
+    load()
+    loadDebt()
+    api.get(`/loyalty/customer/${id}`)
+      .then(r => setLoyalty(r.data))
+      .catch(() => {})
+  }, [id])
 
   const save = async () => {
     setSaving(true)
@@ -116,6 +123,30 @@ export default function CustomerDetail() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {loyalty && (
+        <div className="card p-5 border-accent/20">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="material-symbols-outlined text-accent fill-icon">stars</span>
+            <h2 className="font-display font-bold text-white">Loyalty Points</h2>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="stat-card">
+              <p className="text-2xl font-display font-bold text-accent">{loyalty.points}</p>
+              <p className="label">Available</p>
+            </div>
+            <div className="stat-card">
+              <p className="text-2xl font-display font-bold text-white">{loyalty.totalEarned}</p>
+              <p className="label">Total Earned</p>
+            </div>
+            <div className="stat-card">
+              <p className="text-2xl font-display font-bold text-white/40">{loyalty.totalRedeemed}</p>
+              <p className="label">Redeemed</p>
+            </div>
+          </div>
+          <p className="text-white/20 text-xs font-mono mt-3">LKR 1,000 spent = 10 points · 1 point = LKR 1</p>
         </div>
       )}
 

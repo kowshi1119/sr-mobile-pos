@@ -25,6 +25,10 @@ export default function Dashboard() {
   const [recentSales, setRecentSales] = useState([])
   const [topProducts, setTopProducts] = useState([])
   const [debtors, setDebtors] = useState([])
+  const [target, setTarget] = useState(null)
+  const [upgradeCandidates, setUpgradeCandidates] = useState([])
+  const [warrantyExpiring, setWarrantyExpiring] = useState([])
+  const [summaryPreview, setSummaryPreview] = useState(null)
 
   useEffect(() => {
     Promise.all([
@@ -34,8 +38,25 @@ export default function Dashboard() {
       api.get('/dashboard/recent-sales').then(r => setRecentSales(r.data)),
       api.get('/dashboard/top-products').then(r => setTopProducts(r.data)),
       api.get('/debt').then(r => setDebtors(r.data)),
+      api.get(`/targets?year=${new Date().getFullYear()}&month=${new Date().getMonth() + 1}`).then(r => setTarget(r.data)).catch(() => {}),
+      api.get('/reminders/upgrade-candidates').then(r => setUpgradeCandidates(r.data)).catch(() => {}),
+      api.get('/reminders/warranty-expiring').then(r => setWarrantyExpiring(r.data)).catch(() => {}),
+      api.get('/whatsapp-summary/preview').then(r => setSummaryPreview(r.data)).catch(() => {})
     ]).catch(console.error)
   }, [])
+
+  const sendDailySummary = async () => {
+    try {
+      const { data } = await api.post('/whatsapp-summary/send')
+      if (data.sent) {
+        alert('Daily summary sent to owner WhatsApp!')
+      } else {
+        alert('Failed to send. Check WhatsApp config.')
+      }
+    } catch (e) {
+      alert(e.response?.data?.error || 'Send failed')
+    }
+  }
 
   const now = new Date()
   const isOverdue = r => r.promisedAt && new Date(r.promisedAt) < now && r.status !== 'DELIVERED' && r.status !== 'READY'
@@ -55,6 +76,39 @@ export default function Dashboard() {
         <StatCard icon="person_add" label="New Customers" value={summary?.newCustomers ?? 0} color="brand" />
         <StatCard icon="build" label="Repairs In" value={summary?.newRepairs ?? 0} color="brand" />
       </div>
+
+      {target && (
+        <div className="card p-5 col-span-2 lg:col-span-4">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-brand fill-icon">flag</span>
+              <h3 className="font-display font-bold text-white">Monthly Target</h3>
+            </div>
+            <div className="text-right">
+              <p className="font-mono text-brand font-bold">LKR {Number(target.actualAmount).toLocaleString()}</p>
+              <p className="text-white/30 text-xs font-mono">of LKR {Number(target.targetAmount).toLocaleString()} target</p>
+            </div>
+          </div>
+          {target.hasTarget ? (
+            <>
+              <div className="w-full bg-white/5 rounded-full h-3">
+                <div className={`h-3 rounded-full transition-all ${target.progress >= 100 ? 'bg-accent' : target.progress >= 70 ? 'bg-brand' : 'bg-orange-500'}`} style={{ width: `${Math.min(target.progress, 100)}%` }} />
+              </div>
+              <div className="flex items-center justify-between mt-2">
+                <p className={`text-sm font-mono font-bold ${target.progress >= 100 ? 'text-accent' : target.progress >= 70 ? 'text-brand' : 'text-orange-400'}`}>
+                  {target.progress}% achieved
+                </p>
+                {target.progress < 70 && <p className="text-orange-400 text-xs font-mono animate-pulse">⚠ Behind target</p>}
+                {target.progress >= 100 && <p className="text-accent text-xs font-mono">🎉 Target reached!</p>}
+              </div>
+            </>
+          ) : (
+            <button onClick={() => navigate('/expenses')} className="text-brand/50 text-xs font-mono hover:text-brand transition-colors">
+              Set monthly target →
+            </button>
+          )}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         {/* Left col */}
@@ -108,6 +162,51 @@ export default function Dashboard() {
               ))}
             </div>
           </div>
+
+          {(upgradeCandidates.length > 0 || warrantyExpiring.length > 0) && (
+            <div className="card p-5">
+              <h2 className="font-display font-bold text-white mb-4 flex items-center gap-2">
+                <span className="material-symbols-outlined text-brand fill-icon">notifications_active</span>
+                Customer Reminders
+              </h2>
+
+              {upgradeCandidates.length > 0 && (
+                <div className="mb-4">
+                  <p className="text-white/40 text-xs font-mono uppercase tracking-widest mb-2">📱 Upgrade Opportunities ({upgradeCandidates.length})</p>
+                  <div className="space-y-2">
+                    {upgradeCandidates.slice(0, 3).map((c, i) => (
+                      <div key={i} className="flex items-center justify-between p-3 bg-surface-high rounded-xl">
+                        <div>
+                          <p className="text-white text-sm font-body font-medium">{c.customerName}</p>
+                          <p className="text-white/30 text-xs font-mono">Bought {c.products?.[0] || 'a phone'} — 11mo ago</p>
+                        </div>
+                        {c.optIn && <span className="badge bg-[#25D366]/10 text-[#25D366] border-[#25D366]/20 text-xs">WA Ready</span>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {warrantyExpiring.length > 0 && (
+                <div>
+                  <p className="text-white/40 text-xs font-mono uppercase tracking-widest mb-2">🛡 Warranty Expiring Soon ({warrantyExpiring.length})</p>
+                  <div className="space-y-2">
+                    {warrantyExpiring.slice(0, 3).map((w, i) => (
+                      <div key={i} className="flex items-center justify-between p-3 bg-surface-high rounded-xl">
+                        <div>
+                          <p className="text-white text-sm font-body font-medium">{w.customerName}</p>
+                          <p className="text-white/30 text-xs font-mono">{w.productName} — {w.daysLeft}d left</p>
+                        </div>
+                        <span className={`badge text-xs ${w.daysLeft < 7 ? 'bg-red-500/10 text-red-400 border-red-500/20' : 'bg-brand/10 text-brand border-brand/20'}`}>
+                          {w.daysLeft}d
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Right col */}
@@ -178,6 +277,27 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+
+      {summaryPreview && (
+        <div className="card p-5">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-display font-bold text-white flex items-center gap-2">
+              <svg className="w-4 h-4 text-[#25D366]" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413z"/>
+              </svg>
+              Daily WhatsApp Summary
+            </h3>
+            <button onClick={sendDailySummary} className="btn-primary py-2 px-4 text-sm">
+              <span className="material-symbols-outlined text-sm fill-icon">send</span>
+              Send Now
+            </button>
+          </div>
+          <div className="bg-surface-low rounded-xl p-4 font-mono text-xs text-white/60 whitespace-pre-line border border-white/5">
+            {summaryPreview.message}
+          </div>
+          <p className="text-white/20 text-xs font-mono mt-2">Add OWNER_WHATSAPP_NUMBER to .env to enable sending</p>
+        </div>
+      )}
     </div>
   )
 }

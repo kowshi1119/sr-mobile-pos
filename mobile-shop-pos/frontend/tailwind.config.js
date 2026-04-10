@@ -4,10 +4,20 @@ export default {
   theme: {
     extend: {
       colors: {
-        brand:    { DEFAULT:'#E8A020', dark:'#C4880A', light:'#FFD070' },
-        surface:  { DEFAULT:'#131313','low':'#1C1B1B','high':'#2A2A2A','highest':'#353534','lowest':'#0E0E0E' },
-        onbrand:  '#1A0E00',
-        accent:   '#4EDEA3',
+        brand: {
+          DEFAULT: 'rgb(var(--color-brand) / <alpha-value>)',
+          dark: 'rgb(var(--color-brand-dark) / <alpha-value>)',
+          light: 'rgb(var(--color-brand-light) / <alpha-value>)',
+        },
+        surface: {
+          DEFAULT: 'rgb(var(--color-surface) / <alpha-value>)',
+          low: 'rgb(var(--color-surface-low) / <alpha-value>)',
+          high: 'rgb(var(--color-surface-high) / <alpha-value>)',
+          highest: 'rgb(var(--color-surface-highest) / <alpha-value>)',
+          lowest: 'rgb(var(--color-surface-lowest) / <alpha-value>)',
+        },
+        onbrand: 'rgb(var(--color-onbrand) / <alpha-value>)',
+        accent: 'rgb(var(--color-accent) / <alpha-value>)',
       },
       fontFamily: {
         display: ['"Syne"','sans-serif'],

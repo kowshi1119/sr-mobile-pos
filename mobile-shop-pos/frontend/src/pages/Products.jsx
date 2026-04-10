@@ -138,6 +138,9 @@ export default function Products() {
   const [editProduct, setEditProduct] = useState(null)
   const [qrProduct, setQrProduct] = useState(null)
   const [imeiProduct, setImeiProduct] = useState(null)
+  const [labelProduct, setLabelProduct] = useState(null)
+  const [labelQty, setLabelQty] = useState(1)
+  const [labelQrData, setLabelQrData] = useState(null)
   const [saving, setSaving] = useState(false)
   const [imgUploading, setImgUploading] = useState(false)
   const imgRef = useRef()
@@ -154,6 +157,17 @@ export default function Products() {
     setEditProduct(p)
     setForm({ categoryId: p.categoryId, name: p.name, barcode: p.barcode || '', sellingPrice: p.sellingPrice, costPrice: p.costPrice, stockQuantity: p.stockQuantity, lowStockThreshold: p.lowStockThreshold, warrantyMonths: p.warrantyMonths || '', imageUrl: p.imageUrl || '', hasImei: p.hasImei, imeiNumbers: '', variants: p.variants || [] })
     setShowModal(true)
+  }
+
+  const openLabelModal = async (product) => {
+    setLabelProduct(product)
+    setLabelQty(1)
+    try {
+      const { data } = await api.get(`/products/${product.id}/qr`)
+      setLabelQrData(data)
+    } catch (_) {
+      setLabelQrData(null)
+    }
   }
 
   const uploadImage = async file => {
@@ -235,9 +249,10 @@ export default function Products() {
                 </div>
                 <p className="text-white/20 text-xs">{p.category?.name}</p>
                 {/* Actions */}
-                <div className="flex gap-1 pt-1">
+                <div className="flex gap-1 pt-1 flex-wrap">
                   <button onClick={() => openEdit(p)} className="btn-ghost py-1.5 px-2 text-xs flex-1 justify-center"><span className="material-symbols-outlined text-sm">edit</span></button>
                   <button onClick={() => setQrProduct(p)} className="btn-ghost py-1.5 px-2 text-xs flex-1 justify-center"><span className="material-symbols-outlined text-sm">qr_code_2</span></button>
+                  <button onClick={() => openLabelModal(p)} className="btn-ghost py-1.5 px-2 text-xs flex-1 justify-center" title="Print Label"><span className="material-symbols-outlined text-sm">label</span></button>
                   {p.hasImei && <button onClick={() => setImeiProduct(p)} className="btn-ghost py-1.5 px-2 text-xs flex-1 justify-center"><span className="material-symbols-outlined text-sm">sim_card</span></button>}
                   <button onClick={() => deactivate(p.id)} className="btn-ghost py-1.5 px-2 text-xs text-red-400 hover:text-red-300"><span className="material-symbols-outlined text-sm">delete</span></button>
                 </div>
@@ -331,6 +346,74 @@ export default function Products() {
 
       {qrProduct && <QrModal product={qrProduct} onClose={() => setQrProduct(null)} />}
       {imeiProduct && <ImeiModal product={imeiProduct} onClose={() => { setImeiProduct(null); load() }} />}
+
+      {labelProduct && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={e => e.target === e.currentTarget && setLabelProduct(null)}>
+          <div className="bg-surface rounded-2xl border border-white/10 w-full max-w-lg animate-slide-up">
+            <div className="flex items-center justify-between px-6 py-5 border-b border-white/5">
+              <h2 className="font-display font-bold text-white text-lg">Print Barcode Labels</h2>
+              <button onClick={() => setLabelProduct(null)} className="text-white/30 hover:text-white">
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+            <div className="p-6 space-y-5">
+              <div className="flex justify-center">
+                <div id="label-preview" className="bg-white text-black rounded-lg p-3 w-56 border-2 border-gray-200 text-center">
+                  <p className="font-bold text-sm leading-tight mb-1">{labelProduct.name}</p>
+                  {labelQrData?.qrDataUrl && (
+                    <img src={labelQrData.qrDataUrl} alt="Barcode" className="w-24 h-24 mx-auto my-1" />
+                  )}
+                  <p className="text-xs font-mono text-gray-600">{labelProduct.barcode}</p>
+                  <p className="text-xs text-gray-500">SKU: {labelProduct.sku}</p>
+                  <p className="text-base font-bold mt-1">LKR {Number(labelProduct.sellingPrice).toLocaleString()}</p>
+                  <p className="text-xs text-gray-400">S R Mobile — Chunnakam</p>
+                </div>
+              </div>
+
+              <div>
+                <label className="label">How many labels to print?</label>
+                <input type="number" min="1" max="100" className="input" value={labelQty} onChange={e => setLabelQty(Math.max(1, parseInt(e.target.value) || 1))} />
+              </div>
+
+              <button
+                onClick={() => {
+                  const win = window.open('', '_blank', 'width=800,height=600')
+                  const labels = Array(labelQty).fill(null).map(() => `
+                    <div style="display:inline-block;width:210px;border:1px solid #ccc;border-radius:8px;padding:10px;margin:4px;text-align:center;font-family:Arial,sans-serif;page-break-inside:avoid;">
+                      <p style="font-weight:bold;font-size:12px;margin:0 0 4px;line-height:1.2">${labelProduct.name}</p>
+                      ${labelQrData?.qrDataUrl ? `<img src="${labelQrData.qrDataUrl}" style="width:80px;height:80px"/>` : ''}
+                      <p style="font-family:monospace;font-size:10px;color:#666;margin:2px 0">${labelProduct.barcode}</p>
+                      <p style="font-size:10px;color:#888;margin:0">SKU: ${labelProduct.sku}</p>
+                      <p style="font-weight:bold;font-size:14px;margin:4px 0 2px">LKR ${Number(labelProduct.sellingPrice).toLocaleString()}</p>
+                      <p style="font-size:9px;color:#999">S R Mobile — Chunnakam</p>
+                    </div>
+                  `).join('')
+
+                  win.document.write(`
+                    <html><head>
+                    <title>Labels - ${labelProduct.name}</title>
+                    <style>
+                      body { margin:10px; }
+                      @media print {
+                        body { margin:0; }
+                        @page { margin:5mm; }
+                      }
+                    </style>
+                    </head><body>
+                    <div style="display:flex;flex-wrap:wrap">${labels}</div>
+                    <script>window.onload = () => window.print()</script>
+                    </body></html>
+                  `)
+                  win.document.close()
+                }}
+                className="btn-primary w-full justify-center">
+                <span className="material-symbols-outlined text-sm fill-icon">print</span>
+                Print {labelQty} Label{labelQty > 1 ? 's' : ''}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
