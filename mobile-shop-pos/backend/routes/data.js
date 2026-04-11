@@ -4,6 +4,7 @@ const auth = require('../middleware/auth');
 
 const prisma = new PrismaClient();
 const router = express.Router();
+const TRANSACTION_OPTIONS = { maxWait: 10000, timeout: 30000 };
 
 router.use(auth);
 
@@ -64,7 +65,6 @@ async function clearAllBusinessData(tx) {
   summary.categories = (await tx.category.deleteMany()).count;
   summary.customers = (await tx.customer.deleteMany()).count;
   summary.aiChatSessions = (await tx.aiChatSession.deleteMany()).count;
-  await tx.invoiceCounter.deleteMany();
   await tx.invoiceCounter.upsert({
     where: { id: 1 },
     update: { lastNum: 0 },
@@ -133,7 +133,7 @@ router.post('/import', async (req, res) => {
       summary.offlineSales = await importMany(tx.offlineSale, source.offlineSales);
       summary.invoiceCounters = await importMany(tx.invoiceCounter, source.invoiceCounters);
       summary.aiChatSessions = await importMany(tx.aiChatSession, source.aiChatSessions);
-    });
+    }, TRANSACTION_OPTIONS);
 
     const importedCount = Object.values(summary).reduce((sum, value) => sum + Number(value || 0), 0);
     res.json({ imported: true, merge, importedCount, summary });
@@ -149,7 +149,7 @@ router.post('/reset', async (req, res) => {
       return res.status(400).json({ error: 'Type RESET to confirm data reset' });
     }
 
-    const summary = await prisma.$transaction(async tx => clearAllBusinessData(tx));
+    const summary = await prisma.$transaction(async tx => clearAllBusinessData(tx), TRANSACTION_OPTIONS);
     const deletedCount = Object.values(summary).reduce((sum, value) => sum + Number(value || 0), 0);
 
     res.json({ reset: true, deletedCount, summary });
