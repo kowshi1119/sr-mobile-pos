@@ -12,7 +12,7 @@ function pathsFor(userData) {
 }
 function migrations() {
   return fs.readdirSync(migrationsDir).filter(n => n.endsWith('.sql')).sort().map(name => {
-    const sql = fs.readFileSync(path.join(migrationsDir, name), 'utf8');
+    const sql = fs.readFileSync(path.join(migrationsDir, name), 'utf8').replace(/\r\n/g, '\n');
     return { name, sql, hash: crypto.createHash('sha256').update(sql).digest('hex') };
   });
 }
