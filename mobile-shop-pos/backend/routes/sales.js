@@ -1,13 +1,13 @@
 const express = require('express');
 const router = express.Router();
-const { PrismaClient } = require('@prisma/client');
+const { prisma, Prisma } = require('../db');
+const { money } = require('../utils/money');
 const auth = require('../middleware/auth');
 const QRCode = require('qrcode');
 const { sendWhatsApp } = require('../utils/whatsapp');
-const prisma = new PrismaClient();
 
-async function getNextInvoiceNumber() {
-  const counter = await prisma.invoiceCounter.upsert({
+async function getNextInvoiceNumber(tx) {
+  const counter = await tx.invoiceCounter.upsert({
     where: { id: 1 },
     update: { lastNum: { increment: 1 } },
     create: { id: 1, lastNum: 1 }
@@ -20,6 +20,8 @@ router.post('/', auth, async (req, res) => {
   const { customer: customerData, items, paymentMethod, creditAmount, discountAmount, discountType } = req.body;
 
   try {
+    if (!customerData || !Array.isArray(items) || !items.length || !['CASH','CARD','TRANSFER'].includes(paymentMethod)) return res.status(400).json({error:'Customer, sale items and valid payment method required'});
+    for(const item of items) if(!Number.isSafeInteger(item.quantity)||item.quantity<1||item.quantity>100000) return res.status(400).json({error:'Quantity must be a positive whole number'});
     const result = await prisma.$transaction(async (tx) => {
       // 1. Save or find customer
       // If phone is empty, always create a new anonymous walk-in customer
@@ -57,12 +59,13 @@ router.post('/', auth, async (req, res) => {
       }
 
       // 2. Invoice number
-      const invoiceNumber = await getNextInvoiceNumber();
+      const invoiceNumber = await getNextInvoiceNumber(tx);
 
       // 3. Calculate total
-      const itemsTotal = items.reduce((sum, item) => sum + (parseFloat(item.unitPrice) * item.quantity), 0);
-      const appliedDiscount = parseFloat(discountAmount) || 0;
-      const totalAmount = Math.max(0, itemsTotal - appliedDiscount);
+      const itemsTotal = items.reduce((sum, item) => sum.plus(money(item.unitPrice).times(item.quantity)), new Prisma.Decimal(0));
+      const appliedDiscount = money(discountAmount || 0);
+      if(appliedDiscount.gt(itemsTotal)) return Promise.reject(new Error('Discount exceeds sale total'));
+      const totalAmount = money(itemsTotal.minus(appliedDiscount));
 
       // 4. Create sale
       const sale = await tx.sale.create({
@@ -70,7 +73,7 @@ router.post('/', auth, async (req, res) => {
           customerId: customer.id,
           invoiceNumber,
           totalAmount,
-          discountAmount: appliedDiscount,
+          discountAmount: process.env.DESKTOP_MODE === '1' ? appliedDiscount : Number(appliedDiscount),
           discountType: discountType || 'NONE',
           paymentMethod
         }
@@ -80,7 +83,7 @@ router.post('/', auth, async (req, res) => {
       const warrantyData = [];
       for (const item of items) {
         const product = await tx.product.findUnique({ where: { id: item.productId }, include: { category: true } });
-        if (!product) throw new Error(`Product ${item.productId} not found`);
+        if (!product || !product.isActive) throw new Error(`Product ${item.productId} not found`);
 
         let imeiRecord = null;
         if (product.hasImei) {
@@ -93,8 +96,13 @@ router.post('/', auth, async (req, res) => {
           if (imeiRecord.status !== 'IN_STOCK') throw new Error(`IMEI ${imeiRecord.imei} is already sold`);
         }
 
+        // Validate variant ownership and stock before changing either record.
+        if(item.variantId) {
+          const variant=await tx.productVariant.findUnique({where:{id:item.variantId}});
+          if(!variant||variant.productId!==product.id||variant.stockQuantity<item.quantity||product.hasImei)throw new Error('Invalid variant or insufficient variant stock');
+        }
         // Check stock
-        if (!product.hasImei && product.stockQuantity < item.quantity) {
+        if (!product.hasImei && !item.variantId && product.stockQuantity < item.quantity) {
           throw new Error(`Insufficient stock for ${product.name}`);
         }
 
@@ -106,7 +114,7 @@ router.post('/', auth, async (req, res) => {
             variantId: item.variantId || null,
             imeiId: item.imeiId || null,
             quantity: item.quantity,
-            unitPrice: parseFloat(item.unitPrice)
+            unitPrice: money(item.unitPrice)
           }
         });
 
@@ -137,39 +145,33 @@ router.post('/', auth, async (req, res) => {
       await tx.warrantyRecord.createMany({ data: warrantyData });
 
       // 10. Generate invoice QR
-      const invoiceUrl = `${process.env.FRONTEND_URL}/invoice/${invoiceNumber}`;
+      const invoiceUrl = process.env.DESKTOP_MODE === '1' ? `SR-MOBILE|INVOICE|${invoiceNumber}` : `${process.env.FRONTEND_URL}/invoice/${invoiceNumber}`;
       const qrDataUrl = await QRCode.toDataURL(invoiceUrl, { width: 300, margin: 2 });
 
+      const parsedCredit=money(creditAmount||0);
+      if(parsedCredit.gt(totalAmount))throw new Error('Credit exceeds sale total');
+      if(parsedCredit.gt(0)) {
+        await tx.debtRecord.create({data:{customerId:customer.id,saleId:sale.id,type:'CREDIT',amount:parsedCredit,description:'Credit sale - '+invoiceNumber}});
+        await tx.customer.update({where:{id:customer.id},data:{totalDebt:money(new Prisma.Decimal(customer.totalDebt).plus(parsedCredit))}});
+      }
+      const pts=Number(totalAmount.div(100).floor());
+      if(pts>0) {
+        const account=await tx.loyaltyAccount.upsert({where:{customerId:customer.id},create:{customerId:customer.id},update:{}});
+        await tx.loyaltyAccount.update({where:{id:account.id},data:{points:{increment:pts},totalEarned:{increment:pts},transactions:{create:{type:'EARN',points:pts,description:'Sale '+invoiceNumber,saleId:sale.id}}}});
+      }
       return { sale, customer, invoiceNumber, qrDataUrl, invoiceUrl };
     });
 
-    // 12. Credit sale — create DebtRecord outside transaction
-    const parsedCredit = parseFloat(creditAmount);
-    if (!isNaN(parsedCredit) && parsedCredit > 0) {
-      await prisma.debtRecord.create({
-        data: {
-          customerId: result.customer.id,
-          saleId: result.sale.id,
-          type: 'CREDIT',
-          amount: parsedCredit,
-          description: `Credit sale - ${result.invoiceNumber}`
-        }
-      });
-      await prisma.customer.update({
-        where: { id: result.customer.id },
-        data: { totalDebt: { increment: parsedCredit } }
-      });
-    }
-
-    // 11. Async WhatsApp notification (outside transaction)
-    setImmediate(async () => {
+    let integrationNotice=process.env.DESKTOP_MODE==='1'?'Sale saved locally. Invoice QR codes identify records on this PC.':undefined;
+    {
       try {
         if (result.customer.whatsappOptIn && result.customer.whatsappNumber) {
           const msgId = await sendWhatsApp(
             result.customer.whatsappNumber,
             'invoice_notification',
-            [result.invoiceNumber, result.sale.totalAmount.toString(), result.invoiceUrl]
+            [result.invoiceNumber, result.sale.totalAmount.toString(), process.env.DESKTOP_MODE==='1'?'Please collect your invoice from the shop.':result.invoiceUrl]
           );
+          if(!msgId)integrationNotice='Your sale was saved locally. WhatsApp requires an internet connection and configured service; the notification was not sent.';
           await prisma.notification.create({
             data: {
               customerId: result.customer.id,
@@ -182,46 +184,11 @@ router.post('/', auth, async (req, res) => {
             }
           });
         }
-      } catch (e) { console.error('WhatsApp notification failed:', e.message); }
-    });
-
-    // Auto-earn loyalty points after sale
-    setImmediate(async () => {
-      try {
-        if (result.customer?.id) {
-          const pts = Math.floor(Number(result.sale.totalAmount) * (10 / 1000))
-          if (pts > 0) {
-            let acc = await prisma.loyaltyAccount.findUnique({
-              where: { customerId: result.customer.id }
-            })
-            if (!acc) {
-              acc = await prisma.loyaltyAccount.create({
-                data: { customerId: result.customer.id }
-              })
-            }
-            await prisma.loyaltyAccount.update({
-              where: { id: acc.id },
-              data: {
-                points: { increment: pts },
-                totalEarned: { increment: pts },
-                transactions: {
-                  create: {
-                    type: 'EARN',
-                    points: pts,
-                    description: `Sale ${result.invoiceNumber}`,
-                    saleId: result.sale.id
-                  }
-                }
-              }
-            })
-          }
-        }
-      } catch (loyaltyErr) {
-        console.error('Loyalty earn error:', loyaltyErr.message)
-      }
-    })
+      } catch { integrationNotice='Your sale was saved. The optional notification could not be recorded.'; }
+    }
 
     res.status(201).json({
+      integrationNotice,
       sale: result.sale,
       invoiceNumber: result.invoiceNumber,
       qrDataUrl: result.qrDataUrl
@@ -242,8 +209,8 @@ router.get('/', auth, async (req, res) => {
       where.createdAt = { gte: d, lt: next };
     }
     if (search) where.OR = [
-      { invoiceNumber: { contains: search, mode: 'insensitive' } },
-      { customer: { name: { contains: search, mode: 'insensitive' } } }
+      { invoiceNumber: { contains: search, ...(process.env.DESKTOP_MODE === '1' ? {} : { mode: 'insensitive' }) } },
+      { customer: { name: { contains: search, ...(process.env.DESKTOP_MODE === '1' ? {} : { mode: 'insensitive' }) } } }
     ];
     const sales = await prisma.sale.findMany({
       where,

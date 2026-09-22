@@ -1,12 +1,10 @@
 const express = require('express');
 const router = express.Router();
-const { PrismaClient } = require('@prisma/client');
+const { prisma } = require('../db');
 const auth = require('../middleware/auth');
 const multer = require('multer');
 const cloudinary = require('cloudinary').v2;
 const QRCode = require('qrcode');
-const { v4: uuidv4 } = require('uuid');
-const prisma = new PrismaClient();
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -126,9 +124,9 @@ router.get('/', auth, async (req, res) => {
     const where = { isActive: true };
     if (category) where.categoryId = category;
     if (search) where.OR = [
-      { name: { contains: search, mode: 'insensitive' } },
-      { sku: { contains: search, mode: 'insensitive' } },
-      { barcode: { contains: search, mode: 'insensitive' } }
+      { name: { contains: search, ...(process.env.DESKTOP_MODE === '1' ? {} : { mode: 'insensitive' }) } },
+      { sku: { contains: search, ...(process.env.DESKTOP_MODE === '1' ? {} : { mode: 'insensitive' }) } },
+      { barcode: { contains: search, ...(process.env.DESKTOP_MODE === '1' ? {} : { mode: 'insensitive' }) } }
     ];
 
     if (barcode) {
@@ -328,6 +326,14 @@ router.get('/:id/qr', auth, async (req, res) => {
 router.post('/upload-image', auth, upload.single('image'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    if(process.env.DESKTOP_MODE==='1') {
+      const b=req.file.buffer;
+      const ext=b.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10]))?'png':b[0]===255&&b[1]===216&&b[2]===255?'jpg':b.subarray(0,4).toString()==='RIFF'&&b.subarray(8,12).toString()==='WEBP'?'webp':null;
+      if(!ext)return res.status(400).json({error:'Choose a PNG, JPEG or WebP image'});
+      const name=require('crypto').randomUUID()+'.'+ext;
+      require('fs').writeFileSync(require('path').join(req.app.locals.desktop.paths.uploads,name),b,{flag:'wx'});
+      return res.json({imageUrl:'/uploads/'+name});
+    }
     const b64 = Buffer.from(req.file.buffer).toString('base64');
     const dataURI = `data:${req.file.mimetype};base64,${b64}`;
     const result = await cloudinary.uploader.upload(dataURI, { folder: 'sr-mobile-pos/products' });

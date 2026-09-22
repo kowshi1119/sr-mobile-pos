@@ -377,13 +377,17 @@ export default function Products() {
 
               <button
                 onClick={() => {
-                  const win = window.open('', '_blank', 'width=800,height=600')
+                  const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))
+                  const frame = document.createElement('iframe')
+                  frame.style.position='fixed'; frame.style.width='0'; frame.style.height='0'; frame.style.border='0'
+                  document.body.appendChild(frame)
+                  const win = frame.contentWindow
                   const labels = Array(labelQty).fill(null).map(() => `
                     <div style="display:inline-block;width:210px;border:1px solid #ccc;border-radius:8px;padding:10px;margin:4px;text-align:center;font-family:Arial,sans-serif;page-break-inside:avoid;">
-                      <p style="font-weight:bold;font-size:12px;margin:0 0 4px;line-height:1.2">${labelProduct.name}</p>
+                      <p style="font-weight:bold;font-size:12px;margin:0 0 4px;line-height:1.2">${escape(labelProduct.name)}</p>
                       ${labelQrData?.qrDataUrl ? `<img src="${labelQrData.qrDataUrl}" style="width:80px;height:80px"/>` : ''}
-                      <p style="font-family:monospace;font-size:10px;color:#666;margin:2px 0">${labelProduct.barcode}</p>
-                      <p style="font-size:10px;color:#888;margin:0">SKU: ${labelProduct.sku}</p>
+                      <p style="font-family:monospace;font-size:10px;color:#666;margin:2px 0">${escape(labelProduct.barcode)}</p>
+                      <p style="font-size:10px;color:#888;margin:0">SKU: ${escape(labelProduct.sku)}</p>
                       <p style="font-weight:bold;font-size:14px;margin:4px 0 2px">LKR ${Number(labelProduct.sellingPrice).toLocaleString()}</p>
                       <p style="font-size:9px;color:#999">S R Mobile — Chunnakam</p>
                     </div>
@@ -391,7 +395,7 @@ export default function Products() {
 
                   win.document.write(`
                     <html><head>
-                    <title>Labels - ${labelProduct.name}</title>
+                    <title>Labels - ${escape(labelProduct.name)}</title>
                     <style>
                       body { margin:10px; }
                       @media print {
@@ -401,10 +405,12 @@ export default function Products() {
                     </style>
                     </head><body>
                     <div style="display:flex;flex-wrap:wrap">${labels}</div>
-                    <script>window.onload = () => window.print()</script>
+
                     </body></html>
                   `)
                   win.document.close()
+                  win.onafterprint = () => frame.remove()
+                  Promise.all(Array.from(win.document.images).map(img => img.decode().catch(() => {}))).then(() => {win.focus();win.print()})
                 }}
                 className="btn-primary w-full justify-center">
                 <span className="material-symbols-outlined text-sm fill-icon">print</span>

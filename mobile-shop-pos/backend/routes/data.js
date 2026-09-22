@@ -1,8 +1,7 @@
 const express = require('express');
-const { PrismaClient } = require('@prisma/client');
+const { prisma } = require('../db');
 const auth = require('../middleware/auth');
 
-const prisma = new PrismaClient();
 const router = express.Router();
 const TRANSACTION_OPTIONS = { maxWait: 10000, timeout: 30000 };
 
@@ -36,6 +35,11 @@ const EXPORTERS = {
 
 async function importMany(delegate, rows) {
   if (!Array.isArray(rows) || rows.length === 0) return 0;
+  if(process.env.DESKTOP_MODE==='1') {
+    let count=0;
+    for(const row of rows) { if(await delegate.findUnique({where:{id:row.id}}))continue; await delegate.create({data:row}); count++; }
+    return count;
+  }
   const { count } = await delegate.createMany({ data: rows, skipDuplicates: true });
   return count;
 }
@@ -105,6 +109,7 @@ router.post('/import', async (req, res) => {
     const source = payload.data && typeof payload.data === 'object' ? payload.data : payload;
     const summary = {};
 
+    if(process.env.DESKTOP_MODE==='1')require('../../desktop/backup-manager').backup(req.app.locals.desktop.paths,'safety');
     await prisma.$transaction(async tx => {
       if (!merge) {
         await clearAllBusinessData(tx);
@@ -131,7 +136,12 @@ router.post('/import', async (req, res) => {
       summary.loyaltyAccounts = await importMany(tx.loyaltyAccount, source.loyaltyAccounts);
       summary.loyaltyTransactions = await importMany(tx.loyaltyTransaction, source.loyaltyTransactions);
       summary.offlineSales = await importMany(tx.offlineSale, source.offlineSales);
-      summary.invoiceCounters = await importMany(tx.invoiceCounter, source.invoiceCounters);
+      if(process.env.DESKTOP_MODE==='1') {
+        const sales=await tx.sale.findMany({select:{invoiceNumber:true}});
+        const current=await tx.invoiceCounter.findUnique({where:{id:1}});
+        const lastNum=Math.max(current?.lastNum||0,...(source.invoiceCounters||[]).map(c=>c.lastNum||0),...sales.map(s=>Number(s.invoiceNumber.replace(/^INV-/,''))||0));
+        await tx.invoiceCounter.upsert({where:{id:1},create:{id:1,lastNum},update:{lastNum}});summary.invoiceCounters=1;
+      } else summary.invoiceCounters = await importMany(tx.invoiceCounter, source.invoiceCounters);
       summary.aiChatSessions = await importMany(tx.aiChatSession, source.aiChatSessions);
     }, TRANSACTION_OPTIONS);
 
@@ -149,6 +159,7 @@ router.post('/reset', async (req, res) => {
       return res.status(400).json({ error: 'Type RESET to confirm data reset' });
     }
 
+    if(process.env.DESKTOP_MODE==='1')require('../../desktop/backup-manager').backup(req.app.locals.desktop.paths,'safety');
     const summary = await prisma.$transaction(async tx => clearAllBusinessData(tx), TRANSACTION_OPTIONS);
     const deletedCount = Object.values(summary).reduce((sum, value) => sum + Number(value || 0), 0);
 

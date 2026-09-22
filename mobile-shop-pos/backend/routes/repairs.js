@@ -1,9 +1,8 @@
 const express = require('express');
 const router = express.Router();
-const { PrismaClient } = require('@prisma/client');
+const { prisma } = require('../db');
 const auth = require('../middleware/auth');
 const { sendWhatsApp } = require('../utils/whatsapp');
-const prisma = new PrismaClient();
 
 router.get('/', auth, async (req, res) => {
   try {
@@ -11,8 +10,8 @@ router.get('/', auth, async (req, res) => {
     const where = {};
     if (status) where.status = status;
     if (search) where.OR = [
-      { deviceName: { contains: search, mode: 'insensitive' } },
-      { customer: { name: { contains: search, mode: 'insensitive' } } },
+      { deviceName: { contains: search, ...(process.env.DESKTOP_MODE === '1' ? {} : { mode: 'insensitive' }) } },
+      { customer: { name: { contains: search, ...(process.env.DESKTOP_MODE === '1' ? {} : { mode: 'insensitive' }) } } },
       { customer: { phone: { contains: search } } }
     ];
     const repairs = await prisma.repair.findMany({

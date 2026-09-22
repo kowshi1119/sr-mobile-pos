@@ -37,6 +37,7 @@ export default function SaleSuccess() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-4 animate-slide-up">
+      {state.integrationNotice && <p className="card p-4 text-sm no-print">{state.integrationNotice}</p>}
       <div className="flex items-center justify-between no-print">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-accent/10 rounded-full flex items-center justify-center">

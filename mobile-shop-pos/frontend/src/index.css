@@ -33,7 +33,7 @@
   body {
     background: rgb(var(--color-surface-lowest));
     color: rgb(var(--color-text));
-    font-family: 'DM Sans', sans-serif;
+    font-family: 'DM Sans Variable', sans-serif;
     transition: background-color .2s ease, color .2s ease;
   }
   ::-webkit-scrollbar { width: 4px; height: 4px; }
@@ -151,3 +151,5 @@ html.light [class*='bg-white/5'] {
     display: none !important;
   }
 }
+
+.material-symbols-outlined {font-family:'Material Symbols Outlined Variable';font-weight:normal;font-style:normal;font-size:24px;display:inline-block;white-space:nowrap;word-wrap:normal;direction:ltr;font-feature-settings:'liga';-webkit-font-smoothing:antialiased;}

@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import axios from 'axios'
+import api from '../api/client'
 
-const API = import.meta.env.VITE_API_URL || '/api'
+
 
 export default function PublicInvoice() {
   const { invoiceNumber } = useParams()
@@ -11,7 +11,7 @@ export default function PublicInvoice() {
   const [error, setError] = useState('')
 
   useEffect(() => {
-    axios.get(`${API}/invoice/${invoiceNumber}`)
+    api.get(`/invoice/${invoiceNumber}`)
       .then(r => setData(r.data))
       .catch(() => setError('Invoice not found'))
       .finally(() => setLoading(false))

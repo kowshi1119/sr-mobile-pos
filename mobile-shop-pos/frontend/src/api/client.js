@@ -1,6 +1,6 @@
 import axios from 'axios'
 
-const api = axios.create({ baseURL: import.meta.env.VITE_API_URL || '/api' })
+const api = axios.create({ baseURL: import.meta.env.MODE === 'desktop' ? '/api' : (import.meta.env.VITE_API_URL || '/api') })
 
 api.interceptors.request.use(cfg => {
   const token = localStorage.getItem('token')
@@ -11,7 +11,7 @@ api.interceptors.request.use(cfg => {
 api.interceptors.response.use(
   r => r,
   err => {
-    if (err.response?.status === 401) {
+    if (err.response?.status === 401 && !err.config?.url?.includes('/auth/login')) {
       localStorage.removeItem('token')
       window.location.href = '/login'
     }

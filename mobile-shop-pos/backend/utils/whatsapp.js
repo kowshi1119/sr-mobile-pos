@@ -1,6 +1,7 @@
 const fetch = require('node-fetch');
 
 async function sendWhatsApp(to, templateName, params = []) {
+  if(!process.env.META_WHATSAPP_TOKEN||!process.env.META_PHONE_NUMBER_ID)return null;
   try {
     const phone = to.replace(/\D/g, '');
     const formatted = phone.startsWith('0') ? '94' + phone.slice(1) : phone;
@@ -21,6 +22,7 @@ async function sendWhatsApp(to, templateName, params = []) {
 
     const res = await fetch(`https://graph.facebook.com/v18.0/${process.env.META_PHONE_NUMBER_ID}/messages`, {
       method: 'POST',
+      timeout: 8000,
       headers: {
         'Authorization': `Bearer ${process.env.META_WHATSAPP_TOKEN}`,
         'Content-Type': 'application/json'
@@ -30,10 +32,10 @@ async function sendWhatsApp(to, templateName, params = []) {
 
     const data = await res.json();
     if (data.messages?.[0]?.id) return data.messages[0].id;
-    console.error('WhatsApp send failed:', JSON.stringify(data));
+    console.error('WhatsApp service unavailable');
     return null;
   } catch (err) {
-    console.error('WhatsApp error:', err.message);
+    console.error('WhatsApp service unavailable');
     return null;
   }
 }

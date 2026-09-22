@@ -1,0 +1,11 @@
+node_modules/
+.env
+.env.*
+!.env.example
+dist/
+release/
+*.log
+*.db
+*.db-*
+mobile-shop-pos/backend/generated/
+.DS_Store

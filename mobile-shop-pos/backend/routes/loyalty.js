@@ -1,7 +1,6 @@
 const router = require('express').Router()
-const { PrismaClient } = require('@prisma/client')
+const { prisma } = require('../db');
 const auth = require('../middleware/auth')
-const prisma = new PrismaClient()
 
 const POINTS_PER_LKR = 10 / 1000
 const POINTS_REDEEM_RATE = 1

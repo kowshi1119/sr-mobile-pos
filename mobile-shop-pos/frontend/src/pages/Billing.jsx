@@ -340,14 +340,14 @@ export default function Billing() {
         customer,
         paymentMethod,
         creditAmount: creditSale ? parseFloat(creditAmount) || 0 : 0,
-        discountAmount: discountValue,
+        discountAmount: Number(discountValue.toFixed(2)),
         discountType: discount.type === 'PERCENT' ? `${discount.amount}%` : (redeemPoints > 0 ? `FIXED + ${redeemPoints}pts` : 'FIXED'),
         items: cart.map(i => ({
           productId: i.product.id,
           variantId: i.variantId || null,
           imeiId: i.imeiId || null,
           quantity: i.quantity,
-          unitPrice: i.unitPrice
+          unitPrice: Number(Number(i.unitPrice).toFixed(2))
         }))
       })
 

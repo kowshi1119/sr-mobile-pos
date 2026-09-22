@@ -1,0 +1,30 @@
+{
+  "ImeiStatus": [
+    "IN_STOCK",
+    "SOLD"
+  ],
+  "PaymentMethod": [
+    "CASH",
+    "CARD",
+    "TRANSFER"
+  ],
+  "RepairStatus": [
+    "RECEIVED",
+    "IN_PROGRESS",
+    "WAITING_PARTS",
+    "READY",
+    "DELIVERED"
+  ],
+  "NotificationChannel": [
+    "WHATSAPP"
+  ],
+  "NotificationStatus": [
+    "PENDING",
+    "SENT",
+    "FAILED"
+  ],
+  "DebtType": [
+    "CREDIT",
+    "PAYMENT"
+  ]
+}
