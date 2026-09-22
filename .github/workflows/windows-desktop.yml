@@ -1,0 +1,30 @@
+name: Windows desktop build
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run desktop:prepare
+      - run: npm test
+      - run: npm run desktop:build
+      - name: Generate checksum
+        shell: pwsh
+        run: Get-FileHash release/SR-Mobile-POS-Setup-*.exe -Algorithm SHA256 | Format-List | Out-File release/SHA256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SR-Mobile-POS-Windows
+          path: |
+            release/SR-Mobile-POS-Setup-*.exe
+            release/SHA256.txt
+          retention-days: 14
