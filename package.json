@@ -1,0 +1,81 @@
+{
+  "name": "sr-mobile-pos",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Offline Windows POS for S R Mobile",
+  "author": "S R Mobile",
+  "main": "mobile-shop-pos/desktop/main.js",
+  "scripts": {
+    "web": "npm --prefix mobile-shop-pos/frontend run dev",
+    "build:web": "npm --prefix mobile-shop-pos/frontend run build",
+    "desktop:prepare": "node mobile-shop-pos/desktop/scripts/prepare.js",
+    "desktop:dev": "npm run desktop:prepare && electron .",
+    "desktop:build": "npm run desktop:prepare && electron-builder --win nsis --x64 --publish never",
+    "desktop:dist": "npm run desktop:build",
+    "test": "node --test mobile-shop-pos/desktop/test/*.test.js",
+    "postinstall": "npm ci --prefix mobile-shop-pos/frontend",
+    "test:desktop": "electron mobile-shop-pos/desktop/test/electron-smoke.cjs"
+  },
+  "dependencies": {
+    "@prisma/client": "5.22.0",
+    "bcryptjs": "^2.4.3",
+    "cloudinary": "^2.9.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.6.1",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^2.0.2",
+    "node-fetch": "^2.7.0",
+    "qrcode": "^1.5.4"
+  },
+  "devDependencies": {
+    "electron": "44.4.3",
+    "electron-builder": "26.15.3",
+    "prisma": "5.22.0"
+  },
+  "build": {
+    "appId": "com.srmobile.pos",
+    "productName": "SR Mobile POS",
+    "directories": {
+      "output": "release",
+      "buildResources": "mobile-shop-pos/assets"
+    },
+    "files": [
+      "mobile-shop-pos/desktop/**/*",
+      "mobile-shop-pos/backend/**/*.js",
+      "mobile-shop-pos/backend/generated/**/*",
+      "mobile-shop-pos/backend/prisma/desktop/**/*",
+      "mobile-shop-pos/frontend/dist/**/*",
+      "package.json",
+      "!**/test/**",
+      "!**/.env*",
+      "!**/hash.txt",
+      "!**/scripts/hashPassword.js",
+      "!mobile-shop-pos/backend/node_modules/**/*"
+    ],
+    "asarUnpack": [
+      "**/*.node",
+      "mobile-shop-pos/backend/generated/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "SR-Mobile-POS-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "SR Mobile POS",
+      "deleteAppDataOnUninstall": false
+    }
+  }
+}

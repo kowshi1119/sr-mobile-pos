@@ -23,6 +23,12 @@ export default function DataBackup() {
   const [busy, setBusy] = useState('')
   const [message, setMessage] = useState('Manage backups safely before major changes or deployments.')
 
+  const nativeAction = async action => {
+    setBusy(action)
+    try { const result=await window.desktop[action](localStorage.getItem('token'));setMessage(result.error || (result.cancelled ? 'Cancelled.' : action === 'backup' ? 'Database backup saved. Keep a copy on another drive.' : 'Restoring and restarting...')) }
+    catch {setMessage('Unable to complete the operation. Please sign in again and retry.')}
+    finally {setBusy('')}
+  }
   const handleExport = async () => {
     try {
       setBusy('export')
@@ -92,6 +98,7 @@ export default function DataBackup() {
         <p className="text-sm text-white/80">{message}</p>
       </div>
 
+      {window.desktop && <section className="card p-6 space-y-4"><h2 className="text-xl font-bold">Local Database</h2><p>Automatic backups retain 30 generations. Database backups contain business records; copy the uploads folder separately to protect images.</p><div className="flex gap-4"><ActionButton icon="save" label="Backup Data (.db)" onClick={() => nativeAction('backup')} disabled={busy !== ''}/><ActionButton icon="restore" label="Restore Database" onClick={() => nativeAction('restore')} disabled={busy !== ''}/></div></section>}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         <section className="card p-6 space-y-5">
           <div>

@@ -1,9 +1,8 @@
 const express = require('express');
 const router = express.Router();
-const { PrismaClient } = require('@prisma/client');
+const { prisma } = require('../db');
 const auth = require('../middleware/auth');
 const fetch = require('node-fetch');
-const prisma = new PrismaClient();
 
 const SYSTEM_PROMPT = `You are an admin assistant for S R Mobile, a mobile phone shop POS system in Chunnakam.
 Classify the admin message into one of these intents:
@@ -26,8 +25,10 @@ router.post('/chat', auth, async (req, res) => {
     const { query } = req.body;
     if (!query) return res.status(400).json({ error: 'Query required' });
 
+    if(!process.env.GROQ_API_KEY)return res.status(503).json({error:'AI requires internet and a configured service. Your local POS is still available.'});
     const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
+      timeout: 8000,
       headers: { 'Authorization': `Bearer ${process.env.GROQ_API_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: 'llama-3.3-70b-versatile',
@@ -37,6 +38,7 @@ router.post('/chat', auth, async (req, res) => {
       })
     });
 
+    if(!groqRes.ok)return res.status(503).json({error:'AI service unavailable. Your local POS is still available.'});
     const groqData = await groqRes.json();
     const rawText = groqData.choices?.[0]?.message?.content || '{}';
 
@@ -50,7 +52,7 @@ router.post('/chat', auth, async (req, res) => {
     });
 
     res.json(parsed);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { res.status(503).json({error:'AI needs an internet connection. Your local POS is still available.'}); }
 });
 
 module.exports = router;

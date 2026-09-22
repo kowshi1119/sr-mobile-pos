@@ -1,8 +1,7 @@
 const router = require('express').Router()
-const { PrismaClient } = require('@prisma/client')
+const { prisma } = require('../db');
 const auth = require('../middleware/auth')
 const { sendWhatsApp } = require('../utils/whatsapp')
-const prisma = new PrismaClient()
 
 router.post('/send', auth, async (req, res) => {
   try {

@@ -3,14 +3,9 @@
 
 ---
 
-## 🔐 ADMIN LOGIN CREDENTIALS
+## Administrator setup
 
-```
-Email:    admin@srmobile.lk
-Password: Admin@SR2024
-```
-
-> ⚠️  Change the password after first login by re-running the hash script with a new password.
+Desktop: create your own administrator account on first launch. No default password is provided. See [desktop build guide](../DESKTOP_BUILD.md). Web: configure a unique email, bcrypt password hash and random JWT secret in your hosting settings.
 
 ---
 
@@ -47,11 +42,11 @@ mobile-shop-pos/
 cd mobile-shop-pos
 ```
 
-### Step 2 — Generate Admin Password Hash
+[Credential example removed. Create unique credentials; see DESKTOP_BUILD.md.]
 ```bash
 cd backend
 npm install
-node scripts/hashPassword.js Admin@SR2024
+[Credential example removed. Create unique credentials; see DESKTOP_BUILD.md.]
 ```
 Copy the hash output. You'll need it in your `.env`.
 
@@ -64,7 +59,7 @@ Copy the hash output. You'll need it in your `.env`.
 3. After creation → **Settings → Database → Connection string → URI**
 4. Copy the URI — it looks like:
    ```
-   postgresql://postgres:[PASSWORD]@db.xxxx.supabase.co:5432/postgres
+[Credential example removed. Create unique credentials; see DESKTOP_BUILD.md.]
    ```
 5. Replace `[PASSWORD]` with your actual DB password
 
@@ -115,10 +110,10 @@ Copy the hash output. You'll need it in your `.env`.
 Create `backend/.env` with all your values:
 
 ```env
-DATABASE_URL=postgresql://postgres:YOUR_DB_PASS@db.xxxx.supabase.co:5432/postgres
-JWT_SECRET=sr_mobile_jwt_secret_chunnakam_2024_very_long_string
+[Credential example removed. Create unique credentials; see DESKTOP_BUILD.md.]
+[Credential example removed. Create unique credentials; see DESKTOP_BUILD.md.]
 ADMIN_EMAIL=admin@srmobile.lk
-ADMIN_PASSWORD=PASTE_YOUR_BCRYPT_HASH_FROM_STEP_2_HERE
+[Credential example removed. Create unique credentials; see DESKTOP_BUILD.md.]
 
 CLOUDINARY_CLOUD_NAME=your_cloud_name
 CLOUDINARY_API_KEY=your_api_key
@@ -129,7 +124,7 @@ META_PHONE_NUMBER_ID=your_phone_number_id
 META_WHATSAPP_BUSINESS_ID=your_waba_id
 META_WEBHOOK_VERIFY_TOKEN=sr_mobile_verify
 
-GROQ_API_KEY=gsk_your_groq_key_here
+[Credential example removed. Create unique credentials; see DESKTOP_BUILD.md.]
 
 FRONTEND_URL=http://localhost:3000
 PORT=5000
@@ -228,7 +223,7 @@ Open **http://localhost:3000** → Login with `admin@srmobile.lk` / `Admin@SR202
 ```bash
 # 1. Install backend deps + generate password hash
 cd backend && npm install
-node scripts/hashPassword.js Admin@SR2024
+[Credential example removed. Create unique credentials; see DESKTOP_BUILD.md.]
 
 # 2. Create .env (paste values from Supabase, Cloudinary, Groq, Meta)
 cp .env.example .env
@@ -288,13 +283,13 @@ npm run dev
 | Phone | 0765 733 434 |
 | WhatsApp | +94 765 733 434 |
 | Admin Email | admin@srmobile.lk |
-| Default Password | Admin@SR2024 |
+[Credential example removed. Create unique credentials; see DESKTOP_BUILD.md.]
 
 ---
 
 ## ⚠️ SECURITY CHECKLIST BEFORE GO-LIVE
 
-- [ ] Change `Admin@SR2024` password → run `node scripts/hashPassword.js YOUR_NEW_PASS` and update `.env`
+[Credential example removed. Create unique credentials; see DESKTOP_BUILD.md.]
 - [ ] Set a strong random `JWT_SECRET` (32+ chars)
 - [ ] Set a strong `META_WEBHOOK_VERIFY_TOKEN`
 - [ ] Never commit `.env` to GitHub (it's in `.gitignore`)

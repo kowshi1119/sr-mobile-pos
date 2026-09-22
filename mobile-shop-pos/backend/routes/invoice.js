@@ -1,7 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
+const { prisma } = require('../db');
 
 // GET /api/invoice/:invoice_number  (public - no auth)
 router.get('/:invoiceNumber', async (req, res) => {

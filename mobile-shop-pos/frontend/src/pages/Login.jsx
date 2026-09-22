@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import api from '../api/client'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
@@ -6,6 +7,8 @@ export default function Login() {
   const { login } = useAuth()
   const navigate = useNavigate()
   const [form, setForm] = useState({ email: '', password: '' })
+  const [setup, setSetup] = useState(false)
+  useEffect(() => { api.get('/auth/setup-status').then(r => setSetup(r.data.required)).catch(() => {}) }, [])
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -13,6 +16,7 @@ export default function Login() {
     e.preventDefault()
     setError(''); setLoading(true)
     try {
+      if(setup) { await api.post('/auth/setup', form); setSetup(false) }
       await login(form.email, form.password)
       navigate('/dashboard')
     } catch (err) {
@@ -40,6 +44,7 @@ export default function Login() {
         {/* Card */}
         <div className="card p-8">
           <form onSubmit={submit} className="space-y-5">
+            {setup && <p className="text-brand">Create your administrator account. Choose a password with at least 12 characters.</p>}
             <div>
               <label className="label">Admin Email</label>
               <div className="relative">
@@ -66,7 +71,7 @@ export default function Login() {
 
             <button type="submit" disabled={loading} className="btn-primary w-full justify-center py-3 text-base mt-2">
               {loading ? <span className="material-symbols-outlined animate-spin text-lg">refresh</span> : <span className="material-symbols-outlined text-lg">login</span>}
-              {loading ? 'Signing in...' : 'Sign In'}
+              {loading ? 'Please wait...' : setup ? 'Create Administrator' : 'Sign In'}
             </button>
           </form>
         </div>

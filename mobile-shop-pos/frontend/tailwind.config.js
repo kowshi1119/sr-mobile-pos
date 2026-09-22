@@ -20,9 +20,9 @@ export default {
         accent: 'rgb(var(--color-accent) / <alpha-value>)',
       },
       fontFamily: {
-        display: ['"Syne"','sans-serif'],
-        body:    ['"DM Sans"','sans-serif'],
-        mono:    ['"JetBrains Mono"','monospace'],
+        display: ['"Syne Variable"','sans-serif'],
+        body:    ['"DM Sans Variable"','sans-serif'],
+        mono:    ['"JetBrains Mono Variable"','monospace'],
       },
       animation: {
         'fade-in':  'fadeIn 0.3s ease',

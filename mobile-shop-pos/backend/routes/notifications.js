@@ -1,8 +1,7 @@
 const express = require('express');
 const router = express.Router();
-const { PrismaClient } = require('@prisma/client');
+const { prisma } = require('../db');
 const auth = require('../middleware/auth');
-const prisma = new PrismaClient();
 
 router.get('/', auth, async (req, res) => {
   try {
@@ -38,8 +37,8 @@ router.post('/webhook', async (req, res) => {
 
 // GET webhook verification
 router.get('/webhook', (req, res) => {
-  const VERIFY_TOKEN = process.env.META_WEBHOOK_VERIFY_TOKEN || 'sr_mobile_verify';
-  if (req.query['hub.verify_token'] === VERIFY_TOKEN) {
+  const VERIFY_TOKEN = process.env.META_WEBHOOK_VERIFY_TOKEN;
+  if (VERIFY_TOKEN && req.query['hub.verify_token'] === VERIFY_TOKEN) {
     res.send(req.query['hub.challenge']);
   } else {
     res.sendStatus(403);

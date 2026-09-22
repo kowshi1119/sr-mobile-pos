@@ -1,8 +1,7 @@
 const express = require('express');
 const router = express.Router();
-const { PrismaClient } = require('@prisma/client');
+const { prisma } = require('../db');
 const auth = require('../middleware/auth');
-const prisma = new PrismaClient();
 
 // GET /api/debt — All customers with outstanding debt > 0 (sorted highest first)
 router.get('/', auth, async (req, res) => {

@@ -1,8 +1,7 @@
 const express = require('express');
 const router = express.Router();
-const { PrismaClient } = require('@prisma/client');
+const { prisma } = require('../db');
 const auth = require('../middleware/auth');
-const prisma = new PrismaClient();
 
 router.get('/', auth, async (req, res) => {
   try {
@@ -18,7 +17,7 @@ router.get('/', auth, async (req, res) => {
 
     if (search) {
       where.OR = [
-        { name: { contains: search, mode: 'insensitive' } },
+        { name: { contains: search, ...(process.env.DESKTOP_MODE === '1' ? {} : { mode: 'insensitive' }) } },
         { phone: { contains: search } }
       ];
     }
