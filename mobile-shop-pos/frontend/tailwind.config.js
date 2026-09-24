@@ -1,9 +1,14 @@
 /** @type {import('tailwindcss').Config} */
 export default {
   content: ['./index.html','./src/**/*.{js,jsx}'],
+  darkMode: 'class',
   theme: {
     extend: {
       colors: {
+        // `white` is the theme's foreground ink: white in dark mode, near-black in light mode, so every
+        // text-white / border-white / bg-white/N utility adapts to the theme. Use `paper` for real white.
+        white: 'rgb(var(--color-ink) / <alpha-value>)',
+        paper: 'rgb(255 255 255 / <alpha-value>)',
         brand: {
           DEFAULT: 'rgb(var(--color-brand) / <alpha-value>)',
           dark: 'rgb(var(--color-brand-dark) / <alpha-value>)',

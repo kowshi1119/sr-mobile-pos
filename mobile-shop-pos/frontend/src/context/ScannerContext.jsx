@@ -101,7 +101,7 @@ export function ScannerProvider({ children }) {
             <p className="text-white/60 text-sm text-center mt-3 font-mono">Point at QR code</p>
             <button
               onClick={() => setCameraOpen(false)}
-              className="absolute top-2 right-2 w-8 h-8 bg-black/50 rounded-full flex items-center justify-center text-white"
+              className="absolute top-2 right-2 w-8 h-8 bg-black/50 rounded-full flex items-center justify-center text-paper"
             >
               <span className="material-symbols-outlined text-sm">close</span>
             </button>
