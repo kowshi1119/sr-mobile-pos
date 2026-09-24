@@ -1,5 +1,20 @@
 # Desktop QA report
 
+## v1.1.0 — 2026-09-24 (developer Windows 10 x64 host)
+
+Passed:
+- npm test: 27/27. Includes the original lifecycle suite plus a new v1.1 suite: v1.0 database + settings admin upgraded to OWNER (same password), pre-migration snapshot only when migrations are pending, saved port reused across restarts and replaced when taken, readable 4xx messages (blank/invalid prices, missing category, duplicate barcode, insufficient stock), api-rejected log entries without passwords, owner creating a Cashier, staff denied product create / price / stock / delete / categories / users / dashboard / analytics / expenses / suppliers / export / reset / import / discounts / checkout price change, cost price hidden, bundle-price exception, loyalty-only redemption, live permission grant, disable and password reset ending sessions, owner account protected, export excluding logins, reset keeping them, restoring a v1.0 backup keeps the owner able to sign in.
+- Electron UI smoke test (npm run test:desktop), passed on the last 3 runs (earlier runs failed on a screenshot-capture flake and on the IMEI-summary pop-up that blocked the page; both fixed): owner setup form (including password mismatch message), category guidance banner, missing-category and missing-price messages, inline category creation, product saved with blank cost price, staff creation with Cashier preset, all 13 owner pages rendered in dark and light mode, cashier sign-in landing on New Sale with only New Sale/Products/Customers/Repairs in the menu, discount and Add Product hidden, /users redirected, second instance exits, log contains no passwords. Light-mode screenshots were reviewed by eye (dashboard, analytics, billing, products, product form, users, add-staff form, data & backup, login, cashier views).
+- Web frontend build (npm run build:web) and desktop build (npm run desktop:prepare) compile.
+- NSIS installer built: release/SR-Mobile-POS-Setup-1.1.0.exe, SHA-256 93FDBF3ECB390DAEF860436A55C6E3CF3762CC82F283561B2B6A3218EB03CDB4. Authenticode status: NotSigned.
+- Packaged executable --diagnostic-smoke: owner setup, login, category, product with blank cost, sale (stock 5 -> 4), staff login, staff product create denied (403), dashboard.
+- Upgrade dry run on a copy of this PC's real v1.0 profile: migration 002 applied, pre-migration backup created, existing admin login became the OWNER with an identical password hash.
+
+Not tested in v1.1.0:
+- Installing the 1.1.0 installer over the running 1.0.0 installation on this PC (left for the owner to do after a backup), clean-machine install, printers/scanners, live WhatsApp/Groq/Cloudinary, the web deployment against PostgreSQL with the new User table.
+
+## v1.0.0 — 2026-09-22
+
 Validation performed on the developer Windows 10 x64 host, 2026-09-22. This is a tested release candidate, not a claim of completed client-site acceptance.
 
 ## Passed

@@ -1,7 +1,7 @@
 # SR Mobile POS desktop build
 
 ## Status and architecture
-Windows x64 Electron application: packaged React/Vite assets -> loopback Express on an OS-assigned port -> one Prisma client -> SQLite. Electron supplies Node; clients install no development tools. The cloud PostgreSQL schema and backend entry point remain available.
+Windows x64 Electron application: packaged React/Vite assets -> loopback Express on a saved local port (41000-48999, chosen on first launch and replaced automatically if another program takes it) -> one Prisma client -> SQLite. Electron supplies Node; clients install no development tools. The cloud PostgreSQL schema and backend entry point remain available.
 
 Use Windows 10/11 x64 and Node 24 LTS on the developer machine. Keep the repository lockfiles. From the repository root:
 
@@ -16,7 +16,7 @@ npm run desktop:build
 
 Root installation also runs npm ci for the frontend. desktop:prepare generates the SQLite Prisma client and builds the production frontend. desktop:dev uses that production frontend; no Vite server is needed. desktop:build repeats preparation and builds NSIS without publishing.
 
-Installer: release/SR-Mobile-POS-Setup-1.0.0.exe
+Installer: release/SR-Mobile-POS-Setup-1.1.0.exe
 Unpacked executable: release/win-unpacked/SR Mobile POS.exe
 
 For an isolated packaged runtime smoke check:
@@ -25,7 +25,7 @@ For an isolated packaged runtime smoke check:
 & '.\release\win-unpacked\SR Mobile POS.exe' --diagnostic-smoke
 ~~~
 
-This creates a NEW temporary sr-pos-packaged-* profile, performs setup/login/local API/dashboard assertions with external renderer requests blocked, logs the result under that profile's logs/diagnostic.json, then shuts down. It never opens the normal shop database.
+This creates a NEW temporary sr-pos-packaged-* profile, performs owner setup/login, category/product/sale writes, staff login and a denied staff action, plus dashboard assertions with external renderer requests blocked, logs the result under that profile's logs/diagnostic.json, then shuts down. It never opens the normal shop database.
 
 ## User data
 The runtime uses app.getPath('userData') with application name SR Mobile POS. Normally:
@@ -41,21 +41,27 @@ The runtime uses app.getPath('userData') with application name SR Mobile POS. No
   settings/integrations.json (optional)
 ~~~
 
-Data is outside the installation directory and survives upgrades and ordinary uninstall. The local admin email/hash and a random 512-bit JWT secret live in security.json; there is no production default password. Windows account permissions protect this folder; the database itself is not encrypted. Lock the Windows account and protect backups. Each dynamic-port launch uses a new origin, so expect to sign in again after restart.
+Data is outside the installation directory and survives upgrades and ordinary uninstall. security.json holds a random 512-bit JWT secret, the saved local port and a mirror of the owner's username and bcrypt hash (so a restored backup can never lock the owner out); there is no production default password. Windows account permissions protect this folder; the database itself is not encrypted. Lock the Windows account and protect backups. Because the port is saved, the window keeps the same origin and the sign-in and theme survive restarts.
+
+## Users and permissions (v1.1)
+Logins live in the User table (migration 002_users.sql): exactly one OWNER plus any number of STAFF. The owner has every permission; staff have a JSON list of permission keys defined in backend/utils/permissions.js (single source of truth, also served to the Users page with the Cashier/Manager presets). Every API route checks permissions with requirePermission()/requireOwner in backend/middleware/auth.js, which reloads the user on each request so permission changes, disabling and password resets take effect immediately (tokenVersion). Product edits check price, stock and detail changes separately; sales check discounts (loyalty-point redemption is allowed with loyalty.manage) and price changes (bundle lines excepted); cost prices are removed from responses for users without products.viewCost. User management, restore, JSON import and reset are owner-only and never grantable. On upgrade from 1.0, the admin email/hash in security.json becomes the OWNER user (username = the email). JSON export never includes logins; reset keeps them.
+
+## Errors and logs
+Business-rule and validation failures return 4xx with a readable message (backend/utils/errors.js). Unexpected failures show a generic message and are logged to logs/desktop.log as api-error with method, path, status, error name/code and a truncated message; rejected requests are logged as api-rejected. Request bodies, tokens and passwords are never logged. Send desktop.log to support when a save fails.
 
 ## Migrations and money
 The web schema remains backend/prisma/schema.prisma (PostgreSQL). Desktop uses backend/prisma/desktop/schema.prisma with a separate generated client. All 23 business models and relationships remain. PostgreSQL enums become SQLite TEXT with CHECK constraints. Native @db.Decimal annotations are removed. Desktop monetary Float fields are promoted to Prisma Decimal; purchase quantity remains Float. Sales use Decimal arithmetic, two-decimal monetary values and the original maximum 99,999,999.99. SQLite NUMERIC affinity is not exact fixed-scale storage: do not treat this as arbitrary-precision accounting; write normalization and decimal arithmetic are required. Existing report presentation rounds many totals to whole rupees, as before.
 
-Versioned SQL lives in backend/prisma/desktop/migrations. The runtime stores SHA-256 checksums in _DesktopMigration, rejects unknown/newer or edited migration histories, backs up an existing database, and runs pending SQL in a transaction with foreign-key checks. First initialization uses a staging database. Never edit a released migration: add the next numbered SQL migration, update the desktop schema, generate the client, and test old-to-new upgrades. No Prisma CLI or development tools run on the client.
+Versioned SQL lives in backend/prisma/desktop/migrations. The runtime stores SHA-256 checksums in _DesktopMigration, rejects unknown/newer or edited migration histories, backs up an existing database, and runs pending SQL in a transaction with foreign-key checks. First initialization uses a staging database. Never edit a released migration: add the next numbered SQL migration, update the desktop schema, generate the client, and test old-to-new upgrades (desktop/test/permissions.test.js builds a v1.0 database and upgrades it). A pre-migration snapshot is taken only when migrations are pending. No Prisma CLI or development tools run on the client.
 
 To bring cloud data to desktop: use the existing web JSON export, initialize the desktop account, then Data & Backup -> Import JSON Backup. Take backups first. Unique-field conflicts abort the import; duplicate IDs are skipped. Invoice numbering is advanced beyond imported invoices. Compare record counts and financial totals before switching the shop. Cloud image URLs need re-uploading locally for offline availability. Desktop-to-web conversion is not an automatic sync feature.
 
 ## Backups and restore
 Consistent SQLite snapshots use VACUUM INTO, including committed WAL data. Backups run at startup, every 24 hours while open, and shutdown. Upgrades take a pre-migration snapshot. Automatic/manual/pre-migration snapshots retain the latest 30 generations; safety snapshots are deliberately retained until a technician removes them after review. Safety snapshots can grow and must be reviewed periodically.
 
-Data & Backup -> Backup Data opens a native Save dialog. Keep an off-device copy. A .db backup contains business records, NOT uploaded images, admin credentials or optional service settings. Copy uploads separately. For complete disaster recovery, while the app is CLOSED copy the whole user-data directory to protected external storage. Do not share security.json publicly.
+Data & Backup -> Backup Data opens a native Save dialog. Keep an off-device copy. A .db backup contains business records and staff logins, NOT uploaded images, the JWT secret or optional service settings. Copy uploads separately. For complete disaster recovery, while the app is CLOSED copy the whole user-data directory to protected external storage. Do not share security.json publicly.
 
-Restore Database stages a consistent snapshot, checks SQLite integrity, all relationships, the full schema and migration checksums, asks for confirmation, drains API requests, disconnects Prisma, creates a safety backup and replaces the database. The app restarts with existing local administrator credentials. An interruption marker recovers a missing active file. A backup from a newer unknown version is rejected. On startup failure, keep all files and contact support; never delete pos.db to make startup succeed. A technician can close the app and restore a validated safety snapshot, retaining the original directory first.
+Restore Database stages a consistent snapshot, checks SQLite integrity, all relationships, the full schema and migration checksums, asks for confirmation, drains API requests, disconnects Prisma, creates a safety backup and replaces the database. The app restarts with the backup's staff logins; the owner login from security.json is restored if the backup has no active owner. An interruption marker recovers a missing active file. A backup from a newer unknown version is rejected. On startup failure, keep all files and contact support; never delete pos.db to make startup succeed. A technician can close the app and restore a validated safety snapshot, retaining the original directory first.
 
 ## Optional integrations and printing
 Core operations have no cloud requirement. Product uploads are local PNG/JPEG/WebP files. Fonts and icons are bundled. Configure optional Groq/Meta credentials in settings/integrations.json using GROQ_API_KEY, META_WHATSAPP_TOKEN, META_PHONE_NUMBER_ID and OWNER_WHATSAPP_NUMBER; restart afterward. Failures use bounded timeouts and do not roll back a saved sale. Desktop invoice messages use a shop-collection notice instead of a public link; confirm the approved WhatsApp template accepts this text. Incoming Meta webhooks cannot reach a loopback-only machine; use the cloud deployment if inbound delivery callbacks are required.
@@ -72,7 +78,7 @@ npx prisma generate
 npm start
 ~~~
 
-Configure the existing web .env variables using .env.example. Root desktop generation never overwrites the web Prisma client. Never package .env files or production credentials. For the web password hash helper, feed a unique password through stdin; do not put it into source, shell arguments or documentation.
+Configure the existing web .env variables using .env.example. The web deployment keeps ADMIN_EMAIL/ADMIN_PASSWORD as a virtual owner; to use staff logins on the web, apply the new User table and Sale.soldBy column to PostgreSQL (for example npx prisma db push against the web database after a backup). Root desktop generation never overwrites the web Prisma client. Never package .env files or production credentials. For the web password hash helper, feed a unique password through stdin; do not put it into source, shell arguments or documentation.
 
 ## Release and updates
 Provide the approved logo at mobile-shop-pos/assets/icon.ico and configure build.win.icon as documented in assets/README.md. Developer builds currently use Electron's default icon. Set the real legal publisher metadata when known. Never claim an unsigned installer is signed. Windows SmartScreen may warn about unsigned/unrecognized software; do not disable Windows security. Configure electron-builder certificate signing through protected CI secrets when a certificate is available.
