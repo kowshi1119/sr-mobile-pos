@@ -90,6 +90,7 @@ model Sale {
   discountAmount  Float            @default(0)
   discountType    String           @default("NONE")
   paymentMethod   PaymentMethod
+  soldBy          String?
   createdAt       DateTime         @default(now())
   customer        Customer         @relation(fields: [customerId], references: [id])
   items           SaleItem[]
@@ -323,4 +324,19 @@ model OfflineSale {
   synced    Boolean  @default(false)
   syncedAt  DateTime?
   createdAt DateTime @default(now())
+}
+
+// Owner and staff logins. permissions holds a JSON array of permission keys.
+model User {
+  id           String    @id @default(uuid())
+  username     String    @unique
+  displayName  String?
+  passwordHash String
+  role         String    @default("STAFF")
+  permissions  String    @default("[]")
+  isActive     Boolean   @default(true)
+  tokenVersion Int       @default(0)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 }

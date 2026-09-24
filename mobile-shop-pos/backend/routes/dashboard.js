@@ -1,10 +1,12 @@
+const { sendError, badRequest } = require('../utils/errors');
+const { requirePermission } = require('../middleware/auth');
 const express = require('express');
 const router = express.Router();
 const { prisma } = require('../db');
 const auth = require('../middleware/auth');
 
 // GET /api/dashboard/summary
-router.get('/summary', auth, async (req, res) => {
+router.get('/summary', requirePermission('dashboard.view'), async (req, res) => {
   try {
     const today = new Date(); today.setHours(0,0,0,0);
     const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
@@ -19,11 +21,11 @@ router.get('/summary', auth, async (req, res) => {
       newCustomers,
       newRepairs
     });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { sendError(res, err); }
 });
 
 // GET /api/dashboard/low-stock
-router.get('/low-stock', auth, async (req, res) => {
+router.get('/low-stock', requirePermission('dashboard.view', 'products.view'), async (req, res) => {
   try {
     const products = await prisma.$queryRaw`
       SELECT id, name, sku, "stockQuantity", "lowStockThreshold"
@@ -32,11 +34,11 @@ router.get('/low-stock', auth, async (req, res) => {
       ORDER BY "stockQuantity" ASC
     `;
     res.json(products);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { sendError(res, err); }
 });
 
 // GET /api/dashboard/pending-repairs
-router.get('/pending-repairs', auth, async (req, res) => {
+router.get('/pending-repairs', requirePermission('dashboard.view', 'repairs.view'), async (req, res) => {
   try {
     const repairs = await prisma.repair.findMany({
       where: { status: { notIn: ['DELIVERED'] } },
@@ -44,11 +46,11 @@ router.get('/pending-repairs', auth, async (req, res) => {
       orderBy: { promisedAt: 'asc' }
     });
     res.json(repairs);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { sendError(res, err); }
 });
 
 // GET /api/dashboard/recent-sales
-router.get('/recent-sales', auth, async (req, res) => {
+router.get('/recent-sales', requirePermission('dashboard.view', 'sales.view'), async (req, res) => {
   try {
     const sales = await prisma.sale.findMany({
       take: 10,
@@ -56,11 +58,11 @@ router.get('/recent-sales', auth, async (req, res) => {
       orderBy: { createdAt: 'desc' }
     });
     res.json(sales);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { sendError(res, err); }
 });
 
 // GET /api/dashboard/top-products
-router.get('/top-products', auth, async (req, res) => {
+router.get('/top-products', requirePermission('dashboard.view', 'analytics.view'), async (req, res) => {
   try {
     const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0,0,0,0);
     const top = await prisma.saleItem.groupBy({
@@ -76,11 +78,11 @@ router.get('/top-products', auth, async (req, res) => {
       return { ...p, unitsSold: t._sum.quantity, totalRevenue: parseFloat(t._sum.unitPrice) * t._sum.quantity };
     });
     res.json(result);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { sendError(res, err); }
 });
 
 // GET /api/dashboard/analytics/monthly
-router.get('/analytics/monthly', auth, async (req, res) => {
+router.get('/analytics/monthly', requirePermission('analytics.view'), async (req, res) => {
   try {
     const year = parseInt(req.query.year) || new Date().getFullYear()
     const months = []
@@ -200,7 +202,7 @@ router.get('/analytics/monthly', auth, async (req, res) => {
 })
 
 // GET /api/dashboard/analytics/products
-router.get('/analytics/products', auth, async (req, res) => {
+router.get('/analytics/products', requirePermission('analytics.view'), async (req, res) => {
   try {
     const from = req.query.from
       ? new Date(req.query.from)
@@ -304,7 +306,7 @@ router.get('/analytics/products', auth, async (req, res) => {
 })
 
 // GET /api/dashboard/analytics/trends
-router.get('/analytics/trends', auth, async (req, res) => {
+router.get('/analytics/trends', requirePermission('analytics.view'), async (req, res) => {
   try {
     const days = Math.min(
       parseInt(req.query.days) || 30, 90
@@ -399,7 +401,7 @@ router.get('/analytics/trends', auth, async (req, res) => {
 })
 
 // GET /api/dashboard/analytics/customers
-router.get('/analytics/customers', auth, async (req, res) => {
+router.get('/analytics/customers', requirePermission('analytics.view'), async (req, res) => {
   try {
     const sales = await prisma.sale.findMany({
       select: {

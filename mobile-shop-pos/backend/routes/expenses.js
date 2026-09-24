@@ -1,3 +1,5 @@
+const { sendError, badRequest } = require('../utils/errors');
+const { requirePermission } = require('../middleware/auth');
 const router = require('express').Router()
 const { prisma } = require('../db');
 const auth = require('../middleware/auth')
@@ -8,11 +10,11 @@ const CATEGORIES = [
   'Transport', 'Other'
 ]
 
-router.get('/categories', auth, (_, res) => {
+router.get('/categories', requirePermission('expenses.manage'), (_, res) => {
   res.json(CATEGORIES)
 })
 
-router.get('/summary/monthly', auth, async (req, res) => {
+router.get('/summary/monthly', requirePermission('expenses.manage', 'analytics.view'), async (req, res) => {
   try {
     const year = parseInt(req.query.year) || new Date().getFullYear()
     const results = []
@@ -30,11 +32,11 @@ router.get('/summary/monthly', auth, async (req, res) => {
     }
     res.json(results)
   } catch (e) {
-    res.status(500).json({ error: e.message })
+    sendError(res, e)
   }
 })
 
-router.get('/', auth, async (req, res) => {
+router.get('/', requirePermission('expenses.manage'), async (req, res) => {
   try {
     const { from, to, category } = req.query
     const where = {}
@@ -55,11 +57,11 @@ router.get('/', auth, async (req, res) => {
     const total = expenses.reduce((s, e) => s + Number(e.amount), 0)
     res.json({ expenses, total: Math.round(total) })
   } catch (e) {
-    res.status(500).json({ error: e.message })
+    sendError(res, e)
   }
 })
 
-router.post('/', auth, async (req, res) => {
+router.post('/', requirePermission('expenses.manage'), async (req, res) => {
   try {
     const { category, description, amount, date } = req.body
     if (!category || !amount) {
@@ -75,16 +77,16 @@ router.post('/', auth, async (req, res) => {
     })
     res.status(201).json(expense)
   } catch (e) {
-    res.status(500).json({ error: e.message })
+    sendError(res, e)
   }
 })
 
-router.delete('/:id', auth, async (req, res) => {
+router.delete('/:id', requirePermission('expenses.manage'), async (req, res) => {
   try {
     await prisma.expense.delete({ where: { id: req.params.id } })
     res.json({ message: 'Deleted' })
   } catch (e) {
-    res.status(500).json({ error: e.message })
+    sendError(res, e)
   }
 })
 

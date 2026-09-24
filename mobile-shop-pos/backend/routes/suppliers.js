@@ -1,8 +1,10 @@
+const { sendError, badRequest } = require('../utils/errors');
+const { requirePermission } = require('../middleware/auth');
 const router = require('express').Router()
 const { prisma } = require('../db');
 const auth = require('../middleware/auth')
 
-router.get('/', auth, async (req, res) => {
+router.get('/', requirePermission('suppliers.manage'), async (req, res) => {
   try {
     const { search } = req.query
     const where = { isActive: true }
@@ -18,11 +20,11 @@ router.get('/', auth, async (req, res) => {
     })
     res.json(suppliers)
   } catch (e) {
-    res.status(500).json({ error: e.message })
+    sendError(res, e)
   }
 })
 
-router.get('/purchases/all', auth, async (req, res) => {
+router.get('/purchases/all', requirePermission('suppliers.manage'), async (req, res) => {
   try {
     const { from, to } = req.query
     const where = {}
@@ -41,11 +43,11 @@ router.get('/purchases/all', auth, async (req, res) => {
     })
     res.json(purchases)
   } catch (e) {
-    res.status(500).json({ error: e.message })
+    sendError(res, e)
   }
 })
 
-router.get('/:id', auth, async (req, res) => {
+router.get('/:id', requirePermission('suppliers.manage'), async (req, res) => {
   try {
     const supplier = await prisma.supplier.findUnique({
       where: { id: req.params.id },
@@ -59,11 +61,11 @@ router.get('/:id', auth, async (req, res) => {
     if (!supplier) return res.status(404).json({ error: 'Not found' })
     res.json(supplier)
   } catch (e) {
-    res.status(500).json({ error: e.message })
+    sendError(res, e)
   }
 })
 
-router.post('/', auth, async (req, res) => {
+router.post('/', requirePermission('suppliers.manage'), async (req, res) => {
   try {
     const { name, phone, email, address, notes } = req.body
     if (!name) return res.status(400).json({ error: 'Name required' })
@@ -72,11 +74,11 @@ router.post('/', auth, async (req, res) => {
     })
     res.status(201).json(supplier)
   } catch (e) {
-    res.status(500).json({ error: e.message })
+    sendError(res, e)
   }
 })
 
-router.patch('/:id', auth, async (req, res) => {
+router.patch('/:id', requirePermission('suppliers.manage'), async (req, res) => {
   try {
     const { name, phone, email, address, notes, isActive } = req.body
     const supplier = await prisma.supplier.update({
@@ -92,11 +94,11 @@ router.patch('/:id', auth, async (req, res) => {
     })
     res.json(supplier)
   } catch (e) {
-    res.status(500).json({ error: e.message })
+    sendError(res, e)
   }
 })
 
-router.post('/:id/purchases', auth, async (req, res) => {
+router.post('/:id/purchases', requirePermission('suppliers.manage'), async (req, res) => {
   try {
     const { invoiceRef, items, notes, purchasedAt } = req.body
     if (!items || items.length === 0) {
@@ -139,11 +141,11 @@ router.post('/:id/purchases', auth, async (req, res) => {
 
     res.status(201).json(purchase)
   } catch (e) {
-    res.status(500).json({ error: e.message })
+    sendError(res, e)
   }
 })
 
-router.get('/:id/purchases', auth, async (req, res) => {
+router.get('/:id/purchases', requirePermission('suppliers.manage'), async (req, res) => {
   try {
     const purchases = await prisma.supplierPurchase.findMany({
       where: { supplierId: req.params.id },
@@ -152,7 +154,7 @@ router.get('/:id/purchases', auth, async (req, res) => {
     })
     res.json(purchases)
   } catch (e) {
-    res.status(500).json({ error: e.message })
+    sendError(res, e)
   }
 })
 

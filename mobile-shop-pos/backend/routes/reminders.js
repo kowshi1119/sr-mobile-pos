@@ -1,8 +1,10 @@
+const { sendError, badRequest } = require('../utils/errors');
+const { requirePermission } = require('../middleware/auth');
 const router = require('express').Router()
 const { prisma } = require('../db');
 const auth = require('../middleware/auth')
 
-router.get('/upgrade-candidates', auth, async (req, res) => {
+router.get('/upgrade-candidates', requirePermission('dashboard.view', 'customers.view'), async (req, res) => {
   try {
     const elevenMonthsAgo = new Date()
     elevenMonthsAgo.setMonth(elevenMonthsAgo.getMonth() - 11)
@@ -50,11 +52,11 @@ router.get('/upgrade-candidates', auth, async (req, res) => {
 
     res.json(candidates)
   } catch (e) {
-    res.status(500).json({ error: e.message })
+    sendError(res, e)
   }
 })
 
-router.get('/warranty-expiring', auth, async (req, res) => {
+router.get('/warranty-expiring', requirePermission('dashboard.view', 'customers.view'), async (req, res) => {
   try {
     const now = new Date()
     const in30d = new Date()
@@ -85,7 +87,7 @@ router.get('/warranty-expiring', auth, async (req, res) => {
       invoiceNumber: w.sale?.invoiceNumber
     })))
   } catch (e) {
-    res.status(500).json({ error: e.message })
+    sendError(res, e)
   }
 })
 

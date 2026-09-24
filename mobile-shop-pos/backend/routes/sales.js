@@ -1,3 +1,6 @@
+const { sendError, badRequest, AppError } = require('../utils/errors');
+const { requirePermission } = require('../middleware/auth');
+const permissions = require('../utils/permissions');
 const express = require('express');
 const router = express.Router();
 const { prisma, Prisma } = require('../db');
@@ -16,12 +19,13 @@ async function getNextInvoiceNumber(tx) {
 }
 
 // POST /api/sales — Complete sale transaction
-router.post('/', auth, async (req, res) => {
+router.post('/', requirePermission('sales.create'), async (req, res) => {
   const { customer: customerData, items, paymentMethod, creditAmount, discountAmount, discountType } = req.body;
 
   try {
     if (!customerData || !Array.isArray(items) || !items.length || !['CASH','CARD','TRANSFER'].includes(paymentMethod)) return res.status(400).json({error:'Customer, sale items and valid payment method required'});
     for(const item of items) if(!Number.isSafeInteger(item.quantity)||item.quantity<1||item.quantity>100000) return res.status(400).json({error:'Quantity must be a positive whole number'});
+    if(money(discountAmount||0).gt(0)&&!permissions.has(req.user,'sales.discount')) return res.status(403).json({error:"You don't have permission to give discounts."});
     const result = await prisma.$transaction(async (tx) => {
       // 1. Save or find customer
       // If phone is empty, always create a new anonymous walk-in customer
@@ -64,7 +68,7 @@ router.post('/', auth, async (req, res) => {
       // 3. Calculate total
       const itemsTotal = items.reduce((sum, item) => sum.plus(money(item.unitPrice).times(item.quantity)), new Prisma.Decimal(0));
       const appliedDiscount = money(discountAmount || 0);
-      if(appliedDiscount.gt(itemsTotal)) return Promise.reject(new Error('Discount exceeds sale total'));
+      if(appliedDiscount.gt(itemsTotal)) return Promise.reject(badRequest('Discount exceeds sale total'));
       const totalAmount = money(itemsTotal.minus(appliedDiscount));
 
       // 4. Create sale
@@ -75,7 +79,8 @@ router.post('/', auth, async (req, res) => {
           totalAmount,
           discountAmount: process.env.DESKTOP_MODE === '1' ? appliedDiscount : Number(appliedDiscount),
           discountType: discountType || 'NONE',
-          paymentMethod
+          paymentMethod,
+          soldBy: req.user?.displayName || null
         }
       });
 
@@ -83,27 +88,35 @@ router.post('/', auth, async (req, res) => {
       const warrantyData = [];
       for (const item of items) {
         const product = await tx.product.findUnique({ where: { id: item.productId }, include: { category: true } });
-        if (!product || !product.isActive) throw new Error(`Product ${item.productId} not found`);
+        if (!product || !product.isActive) throw badRequest(`Product ${item.productId} not found`);
 
         let imeiRecord = null;
         if (product.hasImei) {
-          if (!item.imeiId) throw new Error(`Please select an IMEI for ${product.name}`);
-          if (item.quantity !== 1) throw new Error(`IMEI product ${product.name} must be sold one unit at a time`);
+          if (!item.imeiId) throw badRequest(`Please select an IMEI for ${product.name}`);
+          if (item.quantity !== 1) throw badRequest(`IMEI product ${product.name} must be sold one unit at a time`);
 
           imeiRecord = await tx.imeiRecord.findUnique({ where: { id: item.imeiId } });
-          if (!imeiRecord) throw new Error(`Selected IMEI was not found for ${product.name}`);
-          if (imeiRecord.productId !== item.productId) throw new Error(`Selected IMEI does not belong to ${product.name}`);
-          if (imeiRecord.status !== 'IN_STOCK') throw new Error(`IMEI ${imeiRecord.imei} is already sold`);
+          if (!imeiRecord) throw badRequest(`Selected IMEI was not found for ${product.name}`);
+          if (imeiRecord.productId !== item.productId) throw badRequest(`Selected IMEI does not belong to ${product.name}`);
+          if (imeiRecord.status !== 'IN_STOCK') throw badRequest(`IMEI ${imeiRecord.imei} is already sold`);
         }
 
         // Validate variant ownership and stock before changing either record.
+        let variant=null;
         if(item.variantId) {
-          const variant=await tx.productVariant.findUnique({where:{id:item.variantId}});
-          if(!variant||variant.productId!==product.id||variant.stockQuantity<item.quantity||product.hasImei)throw new Error('Invalid variant or insufficient variant stock');
+          variant=await tx.productVariant.findUnique({where:{id:item.variantId}});
+          if(!variant||variant.productId!==product.id||variant.stockQuantity<item.quantity||product.hasImei)throw badRequest('Invalid variant or insufficient variant stock');
+        }
+        // A price different from the catalogue needs sales.changePrice, except for bundle lines,
+        // whose bundle price is split across the bundled products.
+        const catalogPrice=new Prisma.Decimal(variant?.priceOverride ?? product.sellingPrice);
+        if(!money(item.unitPrice).eq(catalogPrice)&&!permissions.has(req.user,'sales.changePrice')) {
+          const bundle=item.bundleId?await tx.bundle.findFirst({where:{id:item.bundleId,isActive:true,items:{some:{productId:product.id}}}}):null;
+          if(!bundle)throw new AppError(403,`You don't have permission to change the price of ${product.name}.`);
         }
         // Check stock
         if (!product.hasImei && !item.variantId && product.stockQuantity < item.quantity) {
-          throw new Error(`Insufficient stock for ${product.name}`);
+          throw badRequest(`Insufficient stock for ${product.name}`);
         }
 
         // Create sale item
@@ -149,7 +162,7 @@ router.post('/', auth, async (req, res) => {
       const qrDataUrl = await QRCode.toDataURL(invoiceUrl, { width: 300, margin: 2 });
 
       const parsedCredit=money(creditAmount||0);
-      if(parsedCredit.gt(totalAmount))throw new Error('Credit exceeds sale total');
+      if(parsedCredit.gt(totalAmount))throw badRequest('Credit exceeds sale total');
       if(parsedCredit.gt(0)) {
         await tx.debtRecord.create({data:{customerId:customer.id,saleId:sale.id,type:'CREDIT',amount:parsedCredit,description:'Credit sale - '+invoiceNumber}});
         await tx.customer.update({where:{id:customer.id},data:{totalDebt:money(new Prisma.Decimal(customer.totalDebt).plus(parsedCredit))}});
@@ -194,12 +207,12 @@ router.post('/', auth, async (req, res) => {
       qrDataUrl: result.qrDataUrl
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendError(res, err);
   }
 });
 
 // GET /api/sales
-router.get('/', auth, async (req, res) => {
+router.get('/', requirePermission('sales.view'), async (req, res) => {
   try {
     const { date, search } = req.query;
     const where = {};
@@ -217,20 +230,20 @@ router.get('/', auth, async (req, res) => {
       include: { customer: true, items: { include: { product: true } } },
       orderBy: { createdAt: 'desc' }
     });
-    res.json(sales);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+    res.json(permissions.stripCost(req.user, sales));
+  } catch (err) { sendError(res, err); }
 });
 
 // GET /api/sales/:id
-router.get('/:id', auth, async (req, res) => {
+router.get('/:id', requirePermission('sales.view', 'sales.create'), async (req, res) => {
   try {
     const sale = await prisma.sale.findUnique({
       where: { id: req.params.id },
       include: { customer: true, items: { include: { product: true, variant: true, imei: true } }, warrantyRecords: { include: { product: true } } }
     });
     if (!sale) return res.status(404).json({ error: 'Sale not found' });
-    res.json(sale);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+    res.json(permissions.stripCost(req.user, sale));
+  } catch (err) { sendError(res, err); }
 });
 
 module.exports = router;

@@ -1,10 +1,12 @@
+const { sendError, badRequest } = require('../utils/errors');
+const { requirePermission } = require('../middleware/auth');
 const express = require('express');
 const router = express.Router();
 const { prisma } = require('../db');
 const auth = require('../middleware/auth');
 const { sendWhatsApp } = require('../utils/whatsapp');
 
-router.get('/', auth, async (req, res) => {
+router.get('/', requirePermission('repairs.view', 'repairs.manage'), async (req, res) => {
   try {
     const { status, search } = req.query;
     const where = {};
@@ -20,10 +22,10 @@ router.get('/', auth, async (req, res) => {
       orderBy: { createdAt: 'desc' }
     });
     res.json(repairs);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { sendError(res, err); }
 });
 
-router.post('/', auth, async (req, res) => {
+router.post('/', requirePermission('repairs.manage'), async (req, res) => {
   try {
     const { customerId, customerData, deviceName, issueDescription, estimatedCost, promisedAt, notes } = req.body;
     let customer;
@@ -49,10 +51,10 @@ router.post('/', auth, async (req, res) => {
       include: { customer: true }
     });
     res.status(201).json(repair);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { sendError(res, err); }
 });
 
-router.get('/:id', auth, async (req, res) => {
+router.get('/:id', requirePermission('repairs.view', 'repairs.manage'), async (req, res) => {
   try {
     const repair = await prisma.repair.findUnique({
       where: { id: req.params.id },
@@ -60,10 +62,10 @@ router.get('/:id', auth, async (req, res) => {
     });
     if (!repair) return res.status(404).json({ error: 'Repair not found' });
     res.json(repair);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { sendError(res, err); }
 });
 
-router.patch('/:id', auth, async (req, res) => {
+router.patch('/:id', requirePermission('repairs.manage'), async (req, res) => {
   try {
     const { deviceName, issueDescription, estimatedCost, actualCost, promisedAt, notes } = req.body;
     const repair = await prisma.repair.update({
@@ -79,11 +81,11 @@ router.patch('/:id', auth, async (req, res) => {
       include: { customer: true }
     });
     res.json(repair);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { sendError(res, err); }
 });
 
 // PATCH /api/repairs/:id/status
-router.patch('/:id/status', auth, async (req, res) => {
+router.patch('/:id/status', requirePermission('repairs.manage'), async (req, res) => {
   try {
     const { status, actualCost } = req.body;
     const updateData = { status };
@@ -122,7 +124,7 @@ router.patch('/:id/status', auth, async (req, res) => {
     }
 
     res.json(repair);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { sendError(res, err); }
 });
 
 module.exports = router;
