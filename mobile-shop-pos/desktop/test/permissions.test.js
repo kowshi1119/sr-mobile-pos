@@ -107,6 +107,15 @@ test('v1.1 owner/staff permissions, upgrade, validation and recovery',async t=>{
     assert.equal(sale.status,201,JSON.stringify(sale));
   });
 
+  await t.test('cashiers may redeem loyalty points but not give other discounts',async()=>{
+    const customer={name:'Loyal',phone:'0771234567'};
+    const earn=await api('/sales','POST',{customer,items:[{productId:product.id,unitPrice:1500,quantity:1}],paymentMethod:'CASH'},staff);assert.equal(earn.status,201);
+    const base={customer,items:[{productId:product.id,unitPrice:1500,quantity:1}],paymentMethod:'CASH'};
+    assert.equal((await api('/sales','POST',{...base,discountAmount:20,loyaltyPoints:10},staff)).status,403,'discount larger than points');
+    const tooMany=await api('/sales','POST',{...base,discountAmount:500,loyaltyPoints:500},staff);assert.equal(tooMany.status,400);assert.match(tooMany.body.error,/loyalty points/);
+    const redeem=await api('/sales','POST',{...base,discountAmount:10,loyaltyPoints:10},staff);assert.equal(redeem.status,201,JSON.stringify(redeem));assert.equal(Number(redeem.body.sale.totalAmount),1490);
+  });
+
   await t.test('permission changes apply immediately, disabling signs the user out',async()=>{
     const updated=await api('/users/'+staffUser.id,'PATCH',{permissions:[...staffUser.permissions,'products.create','products.editPrice','products.viewCost']},owner);assert.equal(updated.status,200);
     assert.equal((await api('/products','POST',{categoryId:category.id,name:'Case',sellingPrice:'250'},staff)).status,201);

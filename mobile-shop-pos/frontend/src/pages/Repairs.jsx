@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../api/client'
+import { useAuth } from '../context/AuthContext'
 
 const STATUSES = ['','RECEIVED','IN_PROGRESS','WAITING_PARTS','READY','DELIVERED']
 const STATUS_LABELS = { RECEIVED:'Received',IN_PROGRESS:'In Progress',WAITING_PARTS:'Waiting Parts',READY:'Ready',DELIVERED:'Delivered' }
@@ -20,6 +21,7 @@ function Modal({ title, onClose, children }) {
 }
 
 export default function Repairs() {
+  const { can } = useAuth()
   const navigate = useNavigate()
   const [repairs, setRepairs] = useState([])
   const [status, setStatus] = useState('')
@@ -43,7 +45,7 @@ export default function Repairs() {
         notes: form.notes || undefined
       })
       setShowForm(false); load()
-    } finally { setSaving(false) }
+    } catch (e) { alert(e.response?.data?.error || 'The repair could not be saved.') } finally { setSaving(false) }
   }
 
   const now = new Date()
@@ -56,7 +58,7 @@ export default function Repairs() {
           <h1 className="font-display font-bold text-2xl text-white">Repairs</h1>
           <p className="text-white/30 text-sm font-mono">{repairs.length} records</p>
         </div>
-        <button onClick={() => setShowForm(true)} className="btn-primary"><span className="material-symbols-outlined text-sm">add</span>New Repair</button>
+        {can('repairs.manage') && <button onClick={() => setShowForm(true)} className="btn-primary"><span className="material-symbols-outlined text-sm">add</span>New Repair</button>}
       </div>
 
       {/* Filters */}

@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import api from '../api/client'
+import { useAuth } from '../context/AuthContext'
 
 export default function Customers() {
+  const { can } = useAuth()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const [customers, setCustomers] = useState([])
@@ -119,7 +121,7 @@ export default function Customers() {
                       <button onClick={() => navigate(`/customers/${c.id}`)} className="btn-ghost py-1 px-2 text-xs" title="View">
                         <span className="material-symbols-outlined text-sm">open_in_new</span>
                       </button>
-                      {c.isActive ? (
+                      {!can('customers.manage') ? null : c.isActive ? (
                         <>
                           <button onClick={() => deactivate(c)} className="btn-ghost py-1 px-2 text-xs text-orange-400 hover:text-orange-300" title="Deactivate">
                             <span className="material-symbols-outlined text-sm">visibility_off</span>

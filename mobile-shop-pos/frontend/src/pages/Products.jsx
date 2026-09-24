@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import api from '../api/client'
+import { useAuth } from '../context/AuthContext'
 
 function Modal({ title, onClose, children }) {
   return (
@@ -81,7 +82,7 @@ function formatImeiSummary(summary) {
   return parts.length > 0 ? parts.join(', ') : 'No new IMEIs were added'
 }
 
-function ImeiModal({ product, onClose }) {
+function ImeiModal({ product, onClose, canAdd }) {
   const [imeis, setImeis] = useState([])
   const [newImeis, setNewImeis] = useState('')
   const [saving, setSaving] = useState(false)
@@ -116,13 +117,13 @@ function ImeiModal({ product, onClose }) {
             </div>
           ))}
         </div>
-        <div>
+        {canAdd && <div>
           <label className="label">Add IMEI Numbers (one per line)</label>
           <textarea className="input h-24 resize-none font-mono text-xs" placeholder={"350000000000001\n350000000000002"} value={newImeis} onChange={e => setNewImeis(e.target.value)} />
           <button onClick={addImeis} disabled={saving || !newImeis.trim()} className="btn-primary mt-2">
             {saving ? <span className="material-symbols-outlined animate-spin text-sm">refresh</span> : <span className="material-symbols-outlined text-sm">add</span>}Add IMEIs
           </button>
-        </div>
+        </div>}
       </div>
     </Modal>
   )
@@ -143,19 +144,33 @@ export default function Products() {
   const [labelQrData, setLabelQrData] = useState(null)
   const [saving, setSaving] = useState(false)
   const [imgUploading, setImgUploading] = useState(false)
+  const [formError, setFormError] = useState('')
+  const [newCategory, setNewCategory] = useState('')
   const imgRef = useRef()
+  const { can } = useAuth()
+  const canCreate = can('products.create')
+  const canEditAny = can('products.edit', 'products.editPrice', 'products.editStock')
+  const canDelete = can('products.delete')
+  const canSeeCost = can('products.viewCost')
+  const canManageCategories = can('categories.manage')
+  // New products may set every field; existing ones only the fields this user may change.
+  const allow = key => !editProduct || can(key)
 
   const emptyForm = { categoryId:'', name:'', barcode:'', sellingPrice:'', costPrice:'', stockQuantity:'0', lowStockThreshold:'5', warrantyMonths:'', imageUrl:'', hasImei:false, imeiNumbers:'', variants:[] }
   const [form, setForm] = useState(emptyForm)
 
   const load = () => api.get('/products', { params: { search: search || undefined, category: catFilter || undefined } }).then(r => setProducts(r.data))
-  useEffect(() => { api.get('/categories').then(r => setCategories(r.data)) }, [])
+  const [categoriesLoaded, setCategoriesLoaded] = useState(false)
+  const loadCategories = () => api.get('/categories').then(r => { setCategories(r.data); setCategoriesLoaded(true); return r.data })
+  useEffect(() => { loadCategories() }, [])
+  const activeCategories = categories.filter(c => c.isActive)
   useEffect(() => { load() }, [search, catFilter])
 
-  const openAdd = () => { setEditProduct(null); setForm(emptyForm); setShowModal(true) }
+  const openAdd = () => { setEditProduct(null); setForm({ ...emptyForm, categoryId: activeCategories.length === 1 ? activeCategories[0].id : '' }); setFormError(''); setShowModal(true) }
   const openEdit = p => {
     setEditProduct(p)
     setForm({ categoryId: p.categoryId, name: p.name, barcode: p.barcode || '', sellingPrice: p.sellingPrice, costPrice: p.costPrice, stockQuantity: p.stockQuantity, lowStockThreshold: p.lowStockThreshold, warrantyMonths: p.warrantyMonths || '', imageUrl: p.imageUrl || '', hasImei: p.hasImei, imeiNumbers: '', variants: p.variants || [] })
+    setFormError('')
     setShowModal(true)
   }
 
@@ -174,10 +189,35 @@ export default function Products() {
     setImgUploading(true)
     const fd = new FormData(); fd.append('image', file)
     try { const r = await api.post('/products/upload-image', fd, { headers: { 'Content-Type': 'multipart/form-data' } }); setForm(f => ({ ...f, imageUrl: r.data.imageUrl })) }
-    finally { setImgUploading(false) }
+    catch (e) { setFormError(e.response?.data?.error || 'The image could not be uploaded. Use a PNG, JPEG or WebP image under 10 MB.') }
+    finally { setImgUploading(false); if (imgRef.current) imgRef.current.value = '' }
+  }
+
+  const addCategory = async () => {
+    const name = newCategory.trim()
+    if (!name) return setFormError('Type a category name first.')
+    try {
+      const { data } = await api.post('/categories', { name })
+      await loadCategories()
+      setForm(f => ({ ...f, categoryId: data.id }))
+      setNewCategory(''); setFormError('')
+    } catch (e) { setFormError(e.response?.data?.error || 'The category could not be created.') }
+  }
+
+  const amountProblem = (value, label, required) => {
+    const text = String(value ?? '').trim()
+    if (!text) return required ? `Enter the ${label}.` : ''
+    return /^\d+(\.\d{1,2})?$/.test(text) ? '' : `${label[0].toUpperCase() + label.slice(1)} must be a number like 1500 or 1499.50.`
   }
 
   const save = async () => {
+    const problem = (!form.categoryId && (activeCategories.length ? 'Choose a category.' : 'Create a category first (below), then choose it.'))
+      || (!String(form.name).trim() && 'Enter the product name.')
+      || amountProblem(form.sellingPrice, 'selling price', true)
+      || (canSeeCost && amountProblem(form.costPrice, 'cost price', false))
+      || (String(form.stockQuantity ?? '').trim() !== '' && !/^\d+$/.test(String(form.stockQuantity).trim()) && 'Stock quantity must be a whole number.')
+    if (problem) return setFormError(problem)
+    setFormError('')
     setSaving(true)
     try {
       const payload = {
@@ -192,13 +232,17 @@ export default function Products() {
       setShowModal(false)
       load()
 
-      if (!editProduct && response?.data?.imeiSummary) {
+      if (!editProduct && form.hasImei && response?.data?.imeiSummary) {
         alert(`Product saved. IMEI summary: ${formatImeiSummary(response.data.imeiSummary)}`)
       }
-    } catch (e) { alert(e.response?.data?.error || 'Error saving product') } finally { setSaving(false) }
+    } catch (e) { setFormError(e.response?.data?.error || 'The product could not be saved. Please try again.') } finally { setSaving(false) }
   }
 
-  const deactivate = async id => { if (confirm('Deactivate product?')) { await api.delete(`/products/${id}`); load() } }
+  const deactivate = async id => {
+    if (!confirm('Deactivate product?')) return
+    try { await api.delete(`/products/${id}`); load() }
+    catch (e) { alert(e.response?.data?.error || 'The product could not be deactivated.') }
+  }
 
   return (
     <div className="space-y-5 max-w-7xl">
@@ -206,8 +250,15 @@ export default function Products() {
       <div className="flex items-center justify-between">
         <div><h1 className="font-display font-bold text-2xl text-white">Products</h1>
           <p className="text-white/30 text-sm font-mono">{products.length} items</p></div>
-        <button onClick={openAdd} className="btn-primary"><span className="material-symbols-outlined text-sm">add</span>Add Product</button>
+        {canCreate && <button onClick={openAdd} className="btn-primary"><span className="material-symbols-outlined text-sm">add</span>Add Product</button>}
       </div>
+
+      {canCreate && categoriesLoaded && activeCategories.length === 0 ? (
+        <div className="card p-4 flex flex-wrap items-center gap-3 border-brand/30">
+          <span className="material-symbols-outlined text-brand">info</span>
+          <p className="text-white/80 text-sm flex-1">Products belong to a category. Create your first category (for example “Mobile Phones” or “Accessories”) — you can do it inside Add Product too.</p>
+        </div>
+      ) : null}
 
       {/* Filters */}
       <div className="flex gap-3 flex-wrap">
@@ -250,11 +301,11 @@ export default function Products() {
                 <p className="text-white/20 text-xs">{p.category?.name}</p>
                 {/* Actions */}
                 <div className="flex gap-1 pt-1 flex-wrap">
-                  <button onClick={() => openEdit(p)} className="btn-ghost py-1.5 px-2 text-xs flex-1 justify-center"><span className="material-symbols-outlined text-sm">edit</span></button>
+                  {canEditAny && <button onClick={() => openEdit(p)} className="btn-ghost py-1.5 px-2 text-xs flex-1 justify-center" title="Edit"><span className="material-symbols-outlined text-sm">edit</span></button>}
                   <button onClick={() => setQrProduct(p)} className="btn-ghost py-1.5 px-2 text-xs flex-1 justify-center"><span className="material-symbols-outlined text-sm">qr_code_2</span></button>
                   <button onClick={() => openLabelModal(p)} className="btn-ghost py-1.5 px-2 text-xs flex-1 justify-center" title="Print Label"><span className="material-symbols-outlined text-sm">label</span></button>
-                  {p.hasImei && <button onClick={() => setImeiProduct(p)} className="btn-ghost py-1.5 px-2 text-xs flex-1 justify-center"><span className="material-symbols-outlined text-sm">sim_card</span></button>}
-                  <button onClick={() => deactivate(p.id)} className="btn-ghost py-1.5 px-2 text-xs text-red-400 hover:text-red-300"><span className="material-symbols-outlined text-sm">delete</span></button>
+                  {p.hasImei && <button onClick={() => setImeiProduct(p)} className="btn-ghost py-1.5 px-2 text-xs flex-1 justify-center" title="IMEI numbers"><span className="material-symbols-outlined text-sm">sim_card</span></button>}
+                  {canDelete && <button onClick={() => deactivate(p.id)} className="btn-ghost py-1.5 px-2 text-xs text-red-400 hover:text-red-300" title="Deactivate"><span className="material-symbols-outlined text-sm">delete</span></button>}
                 </div>
               </div>
             </div>
@@ -269,51 +320,58 @@ export default function Products() {
             <div className="grid grid-cols-2 gap-4">
               <div className="col-span-2">
                 <label className="label">Category</label>
-                <select className="input" value={form.categoryId} onChange={e => setForm(f => ({...f, categoryId: e.target.value}))}>
-                  <option value="">Select category…</option>
-                  {categories.filter(c => c.isActive).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                <select className="input" value={form.categoryId} disabled={!allow('products.edit')} onChange={e => setForm(f => ({...f, categoryId: e.target.value}))}>
+                  <option value="">{activeCategories.length ? 'Select category…' : 'No categories yet'}</option>
+                  {activeCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
+                {!editProduct && (canManageCategories ? (
+                  <div className="flex gap-2 mt-2">
+                    <input className="input" value={newCategory} onChange={e => setNewCategory(e.target.value)} placeholder={activeCategories.length ? 'Or add a new category…' : 'Type a category name, e.g. Mobile Phones'} onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addCategory())}/>
+                    <button type="button" onClick={addCategory} className="btn-ghost whitespace-nowrap"><span className="material-symbols-outlined text-sm">add</span>Add category</button>
+                  </div>
+                ) : !activeCategories.length && <p className="text-white/60 text-xs mt-1">Ask the owner to create a category first.</p>)}
               </div>
               <div className="col-span-2">
                 <label className="label">Product Name</label>
-                <input className="input" value={form.name} onChange={e => setForm(f => ({...f, name: e.target.value}))} placeholder="e.g. iPhone 15 Pro Max"/>
+                <input className="input" value={form.name} disabled={!allow('products.edit')} onChange={e => setForm(f => ({...f, name: e.target.value}))} placeholder="e.g. iPhone 15 Pro Max"/>
               </div>
               <div className="col-span-2">
                 <label className="label">Custom Barcode (optional)</label>
                 <input
                   className="input font-mono"
+                  disabled={!allow('products.edit')}
                   value={form.barcode}
                   onChange={e => setForm(f => ({ ...f, barcode: e.target.value }))}
                   placeholder={editProduct ? 'Edit the barcode or clear it to auto-generate a new one' : 'Leave blank to auto-generate, or enter your own barcode'}
                 />
                 <p className="text-white/35 text-xs mt-1">
-                  Owner/admin can save any barcode format here. Leave it empty to let the system create one automatically.
+                  Any barcode format is accepted. Leave it empty to let the system create one automatically.
                 </p>
               </div>
               <div>
-                <label className="label">Selling Price (LKR)</label>
-                <input className="input" type="number" value={form.sellingPrice} onChange={e => setForm(f => ({...f, sellingPrice: e.target.value}))}/>
+                <label className="label">Selling Price (LKR) *</label>
+                <input className="input" type="number" min="0" step="0.01" inputMode="decimal" disabled={!allow('products.editPrice')} value={form.sellingPrice} onChange={e => setForm(f => ({...f, sellingPrice: e.target.value}))}/>
               </div>
-              <div>
-                <label className="label">Cost Price (LKR)</label>
-                <input className="input" type="number" value={form.costPrice} onChange={e => setForm(f => ({...f, costPrice: e.target.value}))}/>
-              </div>
+              {canSeeCost && <div>
+                <label className="label">Cost Price (LKR, optional)</label>
+                <input className="input" type="number" min="0" step="0.01" inputMode="decimal" placeholder="0" disabled={!allow('products.editPrice')} value={form.costPrice} onChange={e => setForm(f => ({...f, costPrice: e.target.value}))}/>
+              </div>}
               <div>
                 <label className="label">Stock Qty</label>
-                <input className="input" type="number" value={form.stockQuantity} onChange={e => setForm(f => ({...f, stockQuantity: e.target.value}))}/>
+                <input className="input" type="number" min="0" step="1" disabled={!allow('products.editStock') || (editProduct && form.hasImei)} value={form.stockQuantity} onChange={e => setForm(f => ({...f, stockQuantity: e.target.value}))}/>
               </div>
               <div>
                 <label className="label">Low Stock Threshold</label>
-                <input className="input" type="number" value={form.lowStockThreshold} onChange={e => setForm(f => ({...f, lowStockThreshold: e.target.value}))}/>
+                <input className="input" type="number" min="0" step="1" disabled={!allow('products.edit')} value={form.lowStockThreshold} onChange={e => setForm(f => ({...f, lowStockThreshold: e.target.value}))}/>
               </div>
               <div>
                 <label className="label">Warranty (Months, optional)</label>
-                <input className="input" type="number" placeholder="Inherits from category" value={form.warrantyMonths} onChange={e => setForm(f => ({...f, warrantyMonths: e.target.value}))}/>
+                <input className="input" type="number" min="0" step="1" disabled={!allow('products.edit')} placeholder="Inherits from category" value={form.warrantyMonths} onChange={e => setForm(f => ({...f, warrantyMonths: e.target.value}))}/>
               </div>
               <div>
                 <label className="label">Product Image (optional)</label>
-                <input ref={imgRef} type="file" accept="image/*" className="hidden" onChange={e => e.target.files[0] && uploadImage(e.target.files[0])}/>
-                <button type="button" onClick={() => imgRef.current.click()} className="btn-ghost w-full justify-center py-2" disabled={imgUploading}>
+                <input ref={imgRef} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={e => e.target.files[0] && uploadImage(e.target.files[0])}/>
+                <button type="button" onClick={() => imgRef.current.click()} className="btn-ghost w-full justify-center py-2" disabled={imgUploading || !allow('products.edit')}>
                   {imgUploading ? <span className="material-symbols-outlined animate-spin text-sm">refresh</span> : <span className="material-symbols-outlined text-sm">cloud_upload</span>}
                   {imgUploading ? 'Uploading…' : form.imageUrl ? 'Change Image' : 'Upload Image'}
                 </button>
@@ -323,7 +381,7 @@ export default function Products() {
 
             {/* IMEI toggle */}
             <div className="flex items-center gap-3 p-3 bg-surface-low rounded-lg border border-white/5">
-              <input type="checkbox" id="hasImei" checked={form.hasImei} onChange={e => setForm(f => ({...f, hasImei: e.target.checked}))} className="w-4 h-4 accent-brand"/>
+              <input type="checkbox" id="hasImei" disabled={!!editProduct} checked={form.hasImei} onChange={e => setForm(f => ({...f, hasImei: e.target.checked}))} className="w-4 h-4 accent-brand"/>
               <label htmlFor="hasImei" className="text-white/70 text-sm cursor-pointer">This is a phone with IMEI numbers</label>
             </div>
             {form.hasImei && !editProduct && (
@@ -333,9 +391,16 @@ export default function Products() {
               </div>
             )}
 
+            {formError && (
+              <div role="alert" className="flex items-center gap-2 px-4 py-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+                <span className="material-symbols-outlined text-red-400 text-lg">error</span>
+                <p className="text-red-400 text-sm">{formError}</p>
+              </div>
+            )}
+
             <div className="flex gap-3 pt-2">
               <button onClick={() => setShowModal(false)} className="btn-ghost flex-1 justify-center">Cancel</button>
-              <button onClick={save} disabled={saving || !form.name || !form.categoryId} className="btn-primary flex-1 justify-center">
+              <button onClick={save} disabled={saving || imgUploading} className="btn-primary flex-1 justify-center">
                 {saving ? <span className="material-symbols-outlined animate-spin text-sm">refresh</span> : <span className="material-symbols-outlined text-sm">save</span>}
                 {editProduct ? 'Save Changes' : 'Add Product'}
               </button>
@@ -345,7 +410,7 @@ export default function Products() {
       )}
 
       {qrProduct && <QrModal product={qrProduct} onClose={() => setQrProduct(null)} />}
-      {imeiProduct && <ImeiModal product={imeiProduct} onClose={() => { setImeiProduct(null); load() }} />}
+      {imeiProduct && <ImeiModal product={imeiProduct} canAdd={can('products.editStock')} onClose={() => { setImeiProduct(null); load() }} />}
 
       {labelProduct && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={e => e.target === e.currentTarget && setLabelProduct(null)}>
@@ -358,7 +423,7 @@ export default function Products() {
             </div>
             <div className="p-6 space-y-5">
               <div className="flex justify-center">
-                <div id="label-preview" className="bg-white text-black rounded-lg p-3 w-56 border-2 border-gray-200 text-center">
+                <div id="label-preview" className="bg-paper text-black rounded-lg p-3 w-56 border-2 border-gray-200 text-center">
                   <p className="font-bold text-sm leading-tight mb-1">{labelProduct.name}</p>
                   {labelQrData?.qrDataUrl && (
                     <img src={labelQrData.qrDataUrl} alt="Barcode" className="w-24 h-24 mx-auto my-1" />

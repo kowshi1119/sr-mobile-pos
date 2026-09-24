@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import api from '../api/client'
+import { useAuth } from '../context/AuthContext'
 
 export default function CustomerDetail() {
+  const { can } = useAuth()
   const { id } = useParams()
   const navigate = useNavigate()
   const [customer, setCustomer] = useState(null)
@@ -73,9 +75,9 @@ export default function CustomerDetail() {
           <h1 className="font-display font-bold text-2xl text-white">{customer.name}</h1>
           <p className="text-white/30 text-sm font-mono">{customer.phone}</p>
         </div>
-        <button onClick={() => setEditing(v => !v)} className="btn-ghost py-2 px-4">
+        {can('customers.manage') && <button onClick={() => setEditing(v => !v)} className="btn-ghost py-2 px-4">
           <span className="material-symbols-outlined text-sm">edit</span> Edit
-        </button>
+        </button>}
       </div>
 
       {editing && (
@@ -114,14 +116,14 @@ export default function CustomerDetail() {
               <p className="text-red-400 text-xs font-mono uppercase tracking-wider mb-1">Outstanding Debt</p>
               <p className="text-red-400 font-display font-black text-3xl">LKR {Number(debtData.totalDebt).toLocaleString()}</p>
             </div>
-            <div className="flex gap-2">
+            {can('debt.manage') && <div className="flex gap-2">
               <button onClick={() => setPayModal(true)} className="btn-ghost border-red-500/30 text-red-400 hover:bg-red-500/10 py-2 px-3 text-sm">
                 <span className="material-symbols-outlined text-sm">payments</span> Record Payment
               </button>
               <button onClick={() => setCreditModal(true)} className="btn-ghost py-2 px-3 text-sm">
                 <span className="material-symbols-outlined text-sm">add</span> Add Credit
               </button>
-            </div>
+            </div>}
           </div>
         </div>
       )}
@@ -191,14 +193,14 @@ export default function CustomerDetail() {
       <div className="card">
         <div className="flex items-center justify-between px-5 py-4 border-b border-white/5">
           <h2 className="font-display font-bold text-white">Debt History</h2>
-          <div className="flex gap-2">
+          {can('debt.manage') && <div className="flex gap-2">
             <button onClick={() => setPayModal(true)} className="btn-ghost py-1.5 px-3 text-sm text-red-400 border-red-500/20 hover:bg-red-500/10">
               <span className="material-symbols-outlined text-sm">payments</span> Record Payment
             </button>
             <button onClick={() => setCreditModal(true)} className="btn-ghost py-1.5 px-3 text-sm">
               <span className="material-symbols-outlined text-sm">add</span> Add Credit
             </button>
-          </div>
+          </div>}
         </div>
         <div className="overflow-x-auto">
           {debtLoading ? (

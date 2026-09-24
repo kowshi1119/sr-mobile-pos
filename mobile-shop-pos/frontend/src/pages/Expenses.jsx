@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import api from '../api/client'
+import { useAuth } from '../context/AuthContext'
 
 const CATEGORY_COLORS = {
   Rent: '#E8A020',
@@ -28,6 +29,7 @@ function Modal({ title, onClose, children }) {
 }
 
 export default function Expenses() {
+  const { can } = useAuth()
   const [expenses, setExpenses] = useState([])
   const [total, setTotal] = useState(0)
   const [monthly, setMonthly] = useState([])
@@ -164,7 +166,7 @@ export default function Expenses() {
           </div>
         </div>
 
-        <div className="card p-4 border-brand/20 bg-brand/5 space-y-3">
+        {can('targets.manage') && <div className="card p-4 border-brand/20 bg-brand/5 space-y-3">
           <div className="flex items-center justify-between">
             <div>
               <h3 className="font-display font-bold text-white">Set Monthly Target</h3>
@@ -180,7 +182,7 @@ export default function Expenses() {
             <span className="material-symbols-outlined text-sm">flag</span>
             Save Target
           </button>
-        </div>
+        </div>}
       </div>
 
       <div className="card overflow-hidden">

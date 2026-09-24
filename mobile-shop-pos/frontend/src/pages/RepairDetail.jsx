@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import api from '../api/client'
+import { useAuth } from '../context/AuthContext'
 
 const STATUS_LABELS = { RECEIVED:'Received',IN_PROGRESS:'In Progress',WAITING_PARTS:'Waiting Parts',READY:'Ready for Pickup',DELIVERED:'Delivered' }
 const STATUS_ORDER = ['RECEIVED','IN_PROGRESS','WAITING_PARTS','READY','DELIVERED']
 
 export default function RepairDetail() {
+  const { can } = useAuth()
+  const canManage = can('repairs.manage')
   const { id } = useParams()
   const navigate = useNavigate()
   const [repair, setRepair] = useState(null)
@@ -22,12 +25,13 @@ export default function RepairDetail() {
     try {
       await api.patch(`/repairs/${id}/status`, { status, actualCost: status === 'DELIVERED' ? actualCost : undefined })
       load()
-    } finally { setSaving(false) }
+    } catch (e) { alert(e.response?.data?.error || 'The status could not be changed.') } finally { setSaving(false) }
   }
 
   const saveNotes = async () => {
     setSaving(true)
     try { await api.patch(`/repairs/${id}`, { notes, actualCost: actualCost ? parseFloat(actualCost) : undefined }); load() }
+    catch (e) { alert(e.response?.data?.error || 'The notes could not be saved.') }
     finally { setSaving(false) }
   }
 
@@ -55,7 +59,7 @@ export default function RepairDetail() {
             <p className="label mb-3">Update Status</p>
             <div className="flex gap-2 flex-wrap">
               {STATUS_ORDER.map(s => (
-                <button key={s} onClick={() => changeStatus(s)} disabled={saving || repair.status === s}
+                <button key={s} onClick={() => changeStatus(s)} disabled={!canManage || saving || repair.status === s}
                   className={`px-4 py-2 rounded-lg text-xs font-mono border transition-all ${repair.status === s ? 'bg-brand/10 border-brand text-brand' : 'border-white/10 text-white/40 hover:border-brand/40 hover:text-brand disabled:opacity-30'}`}>
                   {STATUS_LABELS[s]}
                 </button>
@@ -88,15 +92,15 @@ export default function RepairDetail() {
             </div>
             <div>
               <label className="label">Actual Cost (LKR)</label>
-              <input className="input" type="number" placeholder="Enter actual cost on delivery" value={actualCost} onChange={e => setActualCost(e.target.value)}/>
+              <input className="input" type="number" min="0" step="0.01" disabled={!canManage} placeholder="Enter actual cost on delivery" value={actualCost} onChange={e => setActualCost(e.target.value)}/>
             </div>
             <div>
               <label className="label">Notes</label>
-              <textarea className="input h-24 resize-none" value={notes} onChange={e => setNotes(e.target.value)}/>
+              <textarea className="input h-24 resize-none" disabled={!canManage} value={notes} onChange={e => setNotes(e.target.value)}/>
             </div>
-            <button onClick={saveNotes} disabled={saving} className="btn-primary">
+            {canManage && <button onClick={saveNotes} disabled={saving} className="btn-primary">
               {saving ? <span className="material-symbols-outlined animate-spin text-sm">refresh</span> : <span className="material-symbols-outlined text-sm">save</span>}Save Notes
-            </button>
+            </button>}
           </div>
         </div>
 

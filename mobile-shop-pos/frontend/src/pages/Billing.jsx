@@ -3,8 +3,10 @@ import { useNavigate } from 'react-router-dom'
 import api from '../api/client'
 import jsQR from 'jsqr'
 import { useScanner } from '../context/ScannerContext'
+import { useAuth } from '../context/AuthContext'
 
 export default function Billing() {
+  const { can } = useAuth()
   const navigate = useNavigate()
   const [products, setProducts] = useState([])
   const [categories, setCategories] = useState([])
@@ -98,6 +100,7 @@ export default function Billing() {
         }
         return [...c, {
           key,
+          bundleId: bundle.id,
           product: item.product,
           variantId: null,
           imeiId: null,
@@ -317,8 +320,10 @@ export default function Billing() {
     ).filter(i => i.quantity > 0))
   }
   const removeItem = key => setCart(c => c.filter(i => i.key !== key))
+  // Only users with the sales.changePrice permission see the price field (the server checks it too).
+  const setUnitPrice = (key, value) => setCart(c => c.map(i => i.key === key ? { ...i, unitPrice: value === '' ? '' : Math.max(0, Number(value)) } : i))
 
-  const subtotal = cart.reduce((s, i) => s + i.unitPrice * i.quantity, 0)
+  const subtotal = cart.reduce((s, i) => s + (Number(i.unitPrice) || 0) * i.quantity, 0)
   const loyaltyDiscount = redeemPoints || 0
   const discountValue = (discount.amount > 0
     ? discount.type === 'PERCENT'
@@ -334,6 +339,7 @@ export default function Billing() {
 
   const completeSale = async () => {
     if (cart.length === 0) { alert('Cart is empty'); return }
+    if (cart.some(i => i.unitPrice === '' || !Number.isFinite(Number(i.unitPrice)))) { alert('Enter a price for every item.'); return }
     setSubmitting(true)
     try {
       const { data } = await api.post('/sales', {
@@ -342,10 +348,12 @@ export default function Billing() {
         creditAmount: creditSale ? parseFloat(creditAmount) || 0 : 0,
         discountAmount: Number(discountValue.toFixed(2)),
         discountType: discount.type === 'PERCENT' ? `${discount.amount}%` : (redeemPoints > 0 ? `FIXED + ${redeemPoints}pts` : 'FIXED'),
+        loyaltyPoints: redeemPoints || 0,
         items: cart.map(i => ({
           productId: i.product.id,
           variantId: i.variantId || null,
           imeiId: i.imeiId || null,
+          bundleId: i.bundleId || null,
           quantity: i.quantity,
           unitPrice: Number(Number(i.unitPrice).toFixed(2))
         }))
@@ -552,8 +560,14 @@ export default function Billing() {
                   <span className="w-8 text-center text-white text-sm font-mono">{item.quantity}</span>
                   <button onClick={() => updateQty(item.key, 1)} className="w-6 h-6 rounded bg-surface-high text-white/50 hover:text-white flex items-center justify-center text-sm">+</button>
                 </div>
-                <p className="font-display font-bold text-white text-sm">LKR {(item.unitPrice * item.quantity).toLocaleString()}</p>
+                <p className="font-display font-bold text-white text-sm">LKR {((Number(item.unitPrice) || 0) * item.quantity).toLocaleString()}</p>
               </div>
+              {can('sales.changePrice') && !item.bundleId && (
+                <label className="flex items-center gap-2 text-white/60 text-xs">
+                  Unit price
+                  <input type="number" min="0" step="0.01" inputMode="decimal" aria-label={`Unit price for ${item.product.name}`} className="input py-1 px-2 text-xs w-28" value={item.unitPrice} onChange={e => setUnitPrice(item.key, e.target.value)} />
+                </label>
+              )}
               {!item.product.hasImei && item.quantity >= item.product.stockQuantity && (
                 <p className="text-red-400 text-xs font-mono mt-1 flex items-center gap-1">
                   <span className="material-symbols-outlined text-xs">warning</span>
@@ -595,7 +609,7 @@ export default function Billing() {
         </div>
 
         {/* Discount — collapsed by default */}
-        <div className="mb-4">
+        {can('sales.discount') && <div className="mb-4">
           {!showDiscount ? (
             // Collapsed state — just a small link button
             <button
@@ -688,9 +702,9 @@ export default function Billing() {
               )}
             </div>
           )}
-        </div>
+        </div>}
 
-        {loyaltyAccount && loyaltyAccount.points > 0 && (
+        {loyaltyAccount && loyaltyAccount.points > 0 && can('loyalty.manage', 'sales.discount') && (
           <div className="border border-accent/20 rounded-xl p-4 bg-accent/5 space-y-2 animate-fade-in mb-4">
             <div className="flex items-center justify-between">
               <p className="text-accent text-sm font-body flex items-center gap-1.5">
@@ -785,7 +799,7 @@ export default function Billing() {
             <canvas ref={canvasRef} className="hidden"/>
             <div className="absolute inset-0 border-2 border-brand/60 rounded-2xl"/>
             <p className="text-white/60 text-sm text-center mt-3 font-mono">Point at QR code</p>
-            <button onClick={() => setCameraOpen(false)} className="absolute top-2 right-2 w-8 h-8 bg-black/50 rounded-full flex items-center justify-center text-white">
+            <button onClick={() => setCameraOpen(false)} className="absolute top-2 right-2 w-8 h-8 bg-black/50 rounded-full flex items-center justify-center text-paper">
               <span className="material-symbols-outlined text-sm">close</span>
             </button>
           </div>
