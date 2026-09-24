@@ -25,7 +25,11 @@ router.post('/', requirePermission('sales.create'), async (req, res) => {
   try {
     if (!customerData || !Array.isArray(items) || !items.length || !['CASH','CARD','TRANSFER'].includes(paymentMethod)) return res.status(400).json({error:'Customer, sale items and valid payment method required'});
     for(const item of items) if(!Number.isSafeInteger(item.quantity)||item.quantity<1||item.quantity>100000) return res.status(400).json({error:'Quantity must be a positive whole number'});
-    if(money(discountAmount||0).gt(0)&&!permissions.has(req.user,'sales.discount')) return res.status(403).json({error:"You don't have permission to give discounts."});
+    // Without sales.discount, the only discount allowed is redeeming the customer's loyalty points (1 point = LKR 1).
+    const loyaltyPoints=Number(req.body.loyaltyPoints)||0;
+    const loyaltyOnly=money(discountAmount||0).gt(0)&&!permissions.has(req.user,'sales.discount');
+    if(loyaltyOnly&&!(permissions.has(req.user,'loyalty.manage')&&Number.isSafeInteger(loyaltyPoints)&&loyaltyPoints>0&&money(discountAmount).eq(loyaltyPoints)))
+      return res.status(403).json({error:"You don't have permission to give discounts."});
     const result = await prisma.$transaction(async (tx) => {
       // 1. Save or find customer
       // If phone is empty, always create a new anonymous walk-in customer
@@ -60,6 +64,11 @@ router.post('/', requirePermission('sales.create'), async (req, res) => {
             });
           }
         }
+      }
+
+      if(loyaltyOnly) {
+        const account=await tx.loyaltyAccount.findUnique({where:{customerId:customer.id}});
+        if(!account||account.points<loyaltyPoints)throw badRequest('The customer does not have enough loyalty points.');
       }
 
       // 2. Invoice number
