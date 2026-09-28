@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
+import { showAlert } from '../dialogs'
 
 export default function CustomerDetail() {
   const { can } = useAuth()
@@ -43,24 +44,24 @@ export default function CustomerDetail() {
 
   const recordPayment = async () => {
     const amount = parseFloat(payForm.amount)
-    if (!amount || amount <= 0) { alert('Enter a valid amount'); return }
+    if (!amount || amount <= 0) { showAlert('Enter a valid amount'); return }
     setDebtSaving(true)
     try {
       await api.post('/debt', { customerId: id, type: 'PAYMENT', amount, description: payForm.description || 'Payment received' })
       setPayModal(false); setPayForm({ amount: '', description: '' })
       loadDebt(); load()
-    } catch (e) { alert(e.response?.data?.error || 'Failed') } finally { setDebtSaving(false) }
+    } catch (e) { showAlert(e.response?.data?.error || 'Failed') } finally { setDebtSaving(false) }
   }
 
   const addCredit = async () => {
     const amount = parseFloat(creditForm.amount)
-    if (!amount || amount <= 0) { alert('Enter a valid amount'); return }
+    if (!amount || amount <= 0) { showAlert('Enter a valid amount'); return }
     setDebtSaving(true)
     try {
       await api.post('/debt', { customerId: id, type: 'CREDIT', amount, description: creditForm.description || 'Manual credit' })
       setCreditModal(false); setCreditForm({ amount: '', description: '' })
       loadDebt(); load()
-    } catch (e) { alert(e.response?.data?.error || 'Failed') } finally { setDebtSaving(false) }
+    } catch (e) { showAlert(e.response?.data?.error || 'Failed') } finally { setDebtSaving(false) }
   }
 
   if (!customer) return <div className="flex items-center justify-center h-64"><span className="material-symbols-outlined animate-spin text-brand text-3xl">refresh</span></div>

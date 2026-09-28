@@ -18,6 +18,7 @@ export default function Layout() {
 function LayoutInner() {
   const { user, isOwner, can, canOpen, logout } = useAuth()
   const [changingPassword, setChangingPassword] = useState(false)
+  const [aiOpen, setAiOpen] = useState(false)
   const nav = PAGES.filter(canOpen)
   const { theme, toggleTheme } = useTheme()
   const navigate = useNavigate()
@@ -88,6 +89,19 @@ function LayoutInner() {
               <span className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-accent' : 'bg-red-400'}`} />
               {isOnline ? 'Online' : 'Offline'}
             </div>
+            {/* Scan and AI live in the header: floating corner buttons covered form fields (New Sale customer details). */}
+            {can('sales.create') && (
+              <button onClick={openScanner} className="btn-ghost py-2 px-3 text-sm" title="Scan a product QR code with the camera" aria-label="Scan product">
+                <span className="material-symbols-outlined text-sm">qr_code_scanner</span>
+                <span className="hidden lg:inline">Scan</span>
+              </button>
+            )}
+            {can('ai.use') && (
+              <button onClick={() => setAiOpen(v => !v)} className={`btn-ghost py-2 px-3 text-sm ${aiOpen ? 'border-brand/40 text-brand' : ''}`} title="AI assistant" aria-label="AI assistant" aria-expanded={aiOpen}>
+                <span className="material-symbols-outlined text-sm">smart_toy</span>
+                <span className="hidden lg:inline">AI</span>
+              </button>
+            )}
             <button onClick={toggleTheme} className="btn-ghost py-2 px-3 text-sm" aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
               <span className="material-symbols-outlined text-sm">{theme === 'dark' ? 'light_mode' : 'dark_mode'}</span>
               <span className="hidden md:inline">{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>
@@ -111,19 +125,10 @@ function LayoutInner() {
       </div>
 
       {/* AI Widget */}
-      {can('ai.use') && <AiWidget />}
+      {can('ai.use') && <AiWidget open={aiOpen} onClose={() => setAiOpen(false)} />}
 
       {changingPassword && <ChangePassword onClose={() => setChangingPassword(false)} />}
 
-      {/* Global QR Scanner FAB */}
-      {can('sales.create') && <button
-        onClick={openScanner}
-        title="Scan to Add Product"
-        className={`fixed bottom-6 ${can('ai.use') ? 'right-24' : 'right-6'} z-40 flex items-center gap-2 px-4 py-3 bg-brand text-onbrand rounded-full shadow-lg hover:bg-brand/90 active:scale-95 transition-all font-mono text-sm font-bold`}
-      >
-        <span className="material-symbols-outlined text-lg">qr_code_scanner</span>
-        <span className="hidden sm:inline">Scan Product</span>
-      </button>}
     </div>
   )
 }

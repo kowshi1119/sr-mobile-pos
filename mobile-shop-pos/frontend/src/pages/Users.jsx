@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import api from '../api/client'
 import Modal from '../components/Modal'
+import { showAlert, askConfirm } from '../dialogs'
 
 const emptyForm = { username: '', displayName: '', password: '', permissions: [] }
 
@@ -82,15 +83,15 @@ export default function Users() {
   }
 
   const setActive = async (u, isActive) => {
-    if (!isActive && !window.confirm(`Disable ${u.displayName}? They will be signed out and cannot sign in until you enable them again.`)) return
+    if (!isActive && !await askConfirm(`Disable ${u.displayName}? They will be signed out and cannot sign in until you enable them again.`)) return
     try { await api.patch(`/users/${u.id}`, { isActive }); load() }
-    catch (err) { alert(err.response?.data?.error || 'Could not update this user.') }
+    catch (err) { showAlert(err.response?.data?.error || 'Could not update this user.') }
   }
 
   const remove = async u => {
-    if (!window.confirm(`Delete ${u.displayName} (${u.username})? Past sales keep their name.`)) return
+    if (!await askConfirm(`Delete ${u.displayName} (${u.username})? Past sales keep their name.`)) return
     try { await api.delete(`/users/${u.id}`); load() }
-    catch (err) { alert(err.response?.data?.error || 'Could not delete this user.') }
+    catch (err) { showAlert(err.response?.data?.error || 'Could not delete this user.') }
   }
 
   const resetPassword = async e => {
@@ -101,7 +102,7 @@ export default function Users() {
     try {
       await api.post(`/users/${resetFor.id}/password`, { password: newPassword })
       setResetFor(null); setNewPassword('')
-      alert('Password changed. Give the new password to the staff member.')
+      showAlert('Password changed. Give the new password to the staff member.')
     } catch (err) {
       setError(err.response?.data?.error || 'Could not change the password.')
     } finally { setSaving(false) }

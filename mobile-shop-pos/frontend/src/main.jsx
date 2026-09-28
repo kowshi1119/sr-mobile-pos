@@ -6,6 +6,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App'
 import './index.css'
+import { showAlert } from './dialogs'
 
 // Safety net: a failed save that a page forgot to handle still tells the user what went wrong.
 window.addEventListener('unhandledrejection', event => {
@@ -13,7 +14,7 @@ window.addEventListener('unhandledrejection', event => {
   if (!err?.isAxiosError) return
   event.preventDefault()
   if (err.response?.status === 401) return
-  window.alert(err.response?.data?.error || (err.response ? 'The request could not be completed.' : 'Cannot reach the POS service. Please restart SR Mobile POS.'))
+  showAlert(err.response?.data?.error || (err.response ? 'The request could not be completed.' : 'Cannot reach the POS service. Please restart SR Mobile POS.'))
 })
 
 ReactDOM.createRoot(document.getElementById('root')).render(

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
+import { showAlert, askConfirm } from '../dialogs'
 
 const STATUS_LABELS = { RECEIVED:'Received',IN_PROGRESS:'In Progress',WAITING_PARTS:'Waiting Parts',READY:'Ready for Pickup',DELIVERED:'Delivered' }
 const STATUS_ORDER = ['RECEIVED','IN_PROGRESS','WAITING_PARTS','READY','DELIVERED']
@@ -20,18 +21,18 @@ export default function RepairDetail() {
   useEffect(() => { load() }, [id])
 
   const changeStatus = async (status) => {
-    if (!confirm(`Change status to "${STATUS_LABELS[status]}"?`)) return
+    if (!await askConfirm(`Change status to "${STATUS_LABELS[status]}"?`)) return
     setSaving(true)
     try {
       await api.patch(`/repairs/${id}/status`, { status, actualCost: status === 'DELIVERED' ? actualCost : undefined })
       load()
-    } catch (e) { alert(e.response?.data?.error || 'The status could not be changed.') } finally { setSaving(false) }
+    } catch (e) { showAlert(e.response?.data?.error || 'The status could not be changed.') } finally { setSaving(false) }
   }
 
   const saveNotes = async () => {
     setSaving(true)
     try { await api.patch(`/repairs/${id}`, { notes, actualCost: actualCost ? parseFloat(actualCost) : undefined }); load() }
-    catch (e) { alert(e.response?.data?.error || 'The notes could not be saved.') }
+    catch (e) { showAlert(e.response?.data?.error || 'The notes could not be saved.') }
     finally { setSaving(false) }
   }
 

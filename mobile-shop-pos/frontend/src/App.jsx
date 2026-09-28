@@ -21,6 +21,7 @@ import PublicInvoice from './pages/PublicInvoice'
 import DataBackup from './pages/DataBackup'
 import Users from './pages/Users'
 import { PAGES } from './permissions'
+import { DialogHost } from './dialogs'
 
 function PrivateRoute({ children }) {
   const { admin, loading } = useAuth()
@@ -80,6 +81,7 @@ export default function App() {
             <Route path="*" element={<PrivateRoute><Home /></PrivateRoute>} />
           </Routes>
         </BrowserRouter>
+        <DialogHost />
       </AuthProvider>
     </ThemeProvider>
   )

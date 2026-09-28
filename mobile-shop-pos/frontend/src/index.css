@@ -133,6 +133,9 @@ html.light .card { border-color: rgb(var(--color-ink) / 0.1); }
 :where(html.light) .text-blue-400 { color: rgb(29 78 216); }
 :where(html.light) .text-green-400 { color: rgb(22 101 52); }
 
+/* Fields the user may not change must look locked, not editable (e.g. price fields for staff without that permission). */
+.input:disabled, select.input:disabled, textarea.input:disabled { opacity: 0.55; cursor: not-allowed; }
+
 /* Status badge colours */
 .status-received    { @apply bg-blue-500/10 text-blue-400 border border-blue-500/20; }
 .status-in_progress { @apply bg-yellow-500/10 text-yellow-400 border border-yellow-500/20; }

@@ -4,6 +4,7 @@ import api from '../api/client'
 import jsQR from 'jsqr'
 import { useScanner } from '../context/ScannerContext'
 import { useAuth } from '../context/AuthContext'
+import { showAlert } from '../dialogs'
 
 export default function Billing() {
   const { can } = useAuth()
@@ -27,6 +28,9 @@ export default function Billing() {
   const [discount, setDiscount] = useState({ type: 'PERCENT', amount: 0 })
   const [loyaltyAccount, setLoyaltyAccount] = useState(null)
   const [redeemPoints, setRedeemPoints] = useState(0)
+  // What the user typed is kept as text, so entries like "0", "10." or "0.5" are not rewritten mid-typing.
+  const [discountText, setDiscountText] = useState('')
+  const [redeemText, setRedeemText] = useState('')
   const [showLoyalty, setShowLoyalty] = useState(false)
   const [bundles, setBundles] = useState([])
   const [showBundles, setShowBundles] = useState(false)
@@ -143,7 +147,7 @@ export default function Billing() {
       const { data } = await api.get(`/products/${product.id}/imei`)
       const inStock = data.filter(i => i.status === 'IN_STOCK')
       if (inStock.length === 0) {
-        alert('No IMEI in stock for this product!')
+        showAlert('No IMEI in stock for this product!')
         return { added: false, reason: 'no_imei_stock' }
       }
       setAvailableImeis(inStock)
@@ -286,6 +290,9 @@ export default function Billing() {
         } else { animId = requestAnimationFrame(scan) }
       }
       animId = requestAnimationFrame(scan)
+    }).catch(() => {
+      setCameraOpen(false)
+      showAlert('No camera is available on this computer. Use a USB barcode scanner or type the product name in Search.', { title: 'Camera not available' })
     })
     return () => {
       cancelAnimationFrame(animId)
@@ -305,7 +312,7 @@ export default function Billing() {
     })
 
     if (!added) {
-      alert(`IMEI ${imei.imei} is already in the cart`)
+      showAlert(`IMEI ${imei.imei} is already in the cart`)
       return
     }
 
@@ -327,7 +334,7 @@ export default function Billing() {
   const loyaltyDiscount = redeemPoints || 0
   const discountValue = (discount.amount > 0
     ? discount.type === 'PERCENT'
-      ? Math.round(subtotal * discount.amount / 100)
+      ? Math.round(subtotal * Math.min(discount.amount, 100) / 100)
       : Math.min(discount.amount, subtotal)
     : 0) + loyaltyDiscount
   const total = Math.max(0, subtotal - discountValue)
@@ -338,8 +345,8 @@ export default function Billing() {
   }, [total, creditSale])
 
   const completeSale = async () => {
-    if (cart.length === 0) { alert('Cart is empty'); return }
-    if (cart.some(i => i.unitPrice === '' || !Number.isFinite(Number(i.unitPrice)))) { alert('Enter a price for every item.'); return }
+    if (cart.length === 0) { showAlert('Cart is empty'); return }
+    if (cart.some(i => i.unitPrice === '' || !Number.isFinite(Number(i.unitPrice)))) { showAlert('Enter a price for every item.'); return }
     setSubmitting(true)
     try {
       const { data } = await api.post('/sales', {
@@ -368,13 +375,13 @@ export default function Billing() {
         } catch (_) {}
       }
 
-      setDiscount({ type: 'PERCENT', amount: 0 })
+      setDiscount({ type: 'PERCENT', amount: 0 }); setDiscountText('')
       setShowDiscount(false)
       setLoyaltyAccount(null)
-      setRedeemPoints(0)
+      setRedeemPoints(0); setRedeemText('')
       setShowLoyalty(false)
       navigate('/sale-success', { state: { sale: data.sale, invoiceNumber: data.invoiceNumber, qrDataUrl: data.qrDataUrl } })
-    } catch (e) { alert(e.response?.data?.error || 'Sale failed'); setSubmitting(false) }
+    } catch (e) { showAlert(e.response?.data?.error || 'Sale failed'); setSubmitting(false) }
   }
 
   const handlePhoneChange = async (value) => {
@@ -392,13 +399,13 @@ export default function Billing() {
           }))
         } else {
           setLoyaltyAccount(null)
-          setRedeemPoints(0)
+          setRedeemPoints(0); setRedeemText('')
           setShowLoyalty(false)
         }
       } catch (_) {}
     } else {
       setLoyaltyAccount(null)
-      setRedeemPoints(0)
+      setRedeemPoints(0); setRedeemText('')
       setShowLoyalty(false)
     }
   }
@@ -635,7 +642,7 @@ export default function Billing() {
                   type="button"
                   onClick={() => {
                     setShowDiscount(false)
-                    setDiscount({ type: 'PERCENT', amount: 0 })
+                    setDiscount({ type: 'PERCENT', amount: 0 }); setDiscountText('')
                   }}
                   className="text-white/30 hover:text-red-400 transition-colors text-xs font-mono flex items-center gap-1">
                   <span className="material-symbols-outlined text-sm">
@@ -680,12 +687,15 @@ export default function Billing() {
                   max={discount.type === 'PERCENT' ? 100 : subtotal}
                   className="input text-sm py-2 flex-1"
                   placeholder={discount.type === 'PERCENT' ? 'e.g. 10' : 'e.g. 500'}
-                  value={discount.amount || ''}
+                  inputMode="decimal"
+                  value={discountText}
                   onChange={e => {
-                    const val = parseFloat(e.target.value) || 0
+                    setDiscountText(e.target.value)
+                    const val = parseFloat(e.target.value)
                     const max = discount.type === 'PERCENT' ? 100 : subtotal
-                    setDiscount(d => ({ ...d, amount: Math.min(val, max) }))
+                    setDiscount(d => ({ ...d, amount: Number.isFinite(val) && val > 0 ? Math.min(val, max) : 0 }))
                   }}
+                  onBlur={() => setDiscountText(discount.amount ? String(discount.amount) : '')}
                 />
               </div>
 
@@ -729,15 +739,18 @@ export default function Billing() {
                     max={loyaltyAccount.points}
                     className="input text-sm py-1.5 flex-1"
                     placeholder="Points to redeem"
-                    value={redeemPoints || ''}
+                    step="1"
+                    inputMode="numeric"
+                    value={redeemText}
                     onChange={e => {
-                      const v = Math.min(parseInt(e.target.value) || 0, loyaltyAccount.points)
-                      setRedeemPoints(v)
+                      setRedeemText(e.target.value)
+                      setRedeemPoints(Math.max(0, Math.min(parseInt(e.target.value, 10) || 0, loyaltyAccount.points)))
                     }}
+                    onBlur={() => setRedeemText(redeemPoints ? String(redeemPoints) : '')}
                   />
                   <button type="button"
                     onClick={() => {
-                      setRedeemPoints(0)
+                      setRedeemPoints(0); setRedeemText('')
                       setShowLoyalty(false)
                     }}
                     className="text-white/30 hover:text-red-400 text-xs font-mono">

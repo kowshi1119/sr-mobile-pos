@@ -2,8 +2,9 @@ import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../api/client'
 
-export default function AiWidget() {
-  const [open, setOpen] = useState(false)
+// Opened from the header button. It no longer floats a launcher over the page, because a floating
+// button covered the New Sale customer fields and swallowed taps meant for them.
+export default function AiWidget({ open, onClose }) {
   const [query, setQuery] = useState('')
   const [messages, setMessages] = useState([
     { role: 'ai', text: "Hello! I'm your shop assistant. Ask me to find products, check repairs, or navigate anywhere." }
@@ -52,16 +53,10 @@ export default function AiWidget() {
 
   const handleKey = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }
 
-  if (!open) return (
-    <div style={{ position:'fixed', bottom:'24px', right:'24px', zIndex:9999 }}>
-      <button onClick={() => setOpen(true)} className="w-14 h-14 bg-brand rounded-2xl flex items-center justify-center shadow-2xl shadow-brand/30 hover:scale-105 active:scale-95 transition-all">
-        <span className="material-symbols-outlined text-onbrand text-2xl fill-icon">smart_toy</span>
-      </button>
-    </div>
-  )
+  if (!open) return null
 
   return (
-    <div style={{ position:'fixed', bottom:'24px', right:'24px', zIndex:9999, maxWidth:'320px', width:'320px' }}>
+    <div style={{ position:'fixed', top:'72px', right:'24px', zIndex:60, maxWidth:'320px', width:'320px' }}>
     <div className="w-full h-[500px] flex flex-col bg-surface rounded-2xl border border-white/10 shadow-2xl animate-slide-up">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-white/5">
@@ -74,7 +69,7 @@ export default function AiWidget() {
             <p className="text-[10px] text-accent font-mono uppercase">Online</p>
           </div>
         </div>
-        <button onClick={() => setOpen(false)} className="text-white/30 hover:text-white transition-colors">
+        <button onClick={onClose} aria-label="Close AI assistant" className="text-white/30 hover:text-white transition-colors">
           <span className="material-symbols-outlined text-lg">close</span>
         </button>
       </div>

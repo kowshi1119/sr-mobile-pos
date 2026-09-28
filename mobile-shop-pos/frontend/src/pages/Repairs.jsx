@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
+import { showAlert } from '../dialogs'
 
 const STATUSES = ['','RECEIVED','IN_PROGRESS','WAITING_PARTS','READY','DELIVERED']
 const STATUS_LABELS = { RECEIVED:'Received',IN_PROGRESS:'In Progress',WAITING_PARTS:'Waiting Parts',READY:'Ready',DELIVERED:'Delivered' }
@@ -45,7 +46,7 @@ export default function Repairs() {
         notes: form.notes || undefined
       })
       setShowForm(false); load()
-    } catch (e) { alert(e.response?.data?.error || 'The repair could not be saved.') } finally { setSaving(false) }
+    } catch (e) { showAlert(e.response?.data?.error || 'The repair could not be saved.') } finally { setSaving(false) }
   }
 
   const now = new Date()

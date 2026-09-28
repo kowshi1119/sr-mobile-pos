@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
+import { showAlert } from '../dialogs'
 
 function StatCard({ icon, label, value, sub, color = 'brand' }) {
   return (
@@ -51,12 +52,12 @@ export default function Dashboard() {
     try {
       const { data } = await api.post('/whatsapp-summary/send')
       if (data.sent) {
-        alert('Daily summary sent to owner WhatsApp!')
+        showAlert('Daily summary sent to owner WhatsApp!')
       } else {
-        alert('Failed to send. Check WhatsApp config.')
+        showAlert('Failed to send. Check WhatsApp config.')
       }
     } catch (e) {
-      alert(e.response?.data?.error || 'Send failed')
+      showAlert(e.response?.data?.error || 'Send failed')
     }
   }
 

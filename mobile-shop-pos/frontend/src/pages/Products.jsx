@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
+import { showAlert, askConfirm } from '../dialogs'
 
 function Modal({ title, onClose, children }) {
   return (
@@ -95,9 +96,9 @@ function ImeiModal({ product, onClose, canAdd }) {
       const r = await api.get(`/products/${product.id}/imei`)
       setImeis(r.data)
       setNewImeis('')
-      alert(`IMEI update complete: ${formatImeiSummary(data)}`)
+      showAlert(`IMEI update complete: ${formatImeiSummary(data)}`)
     } catch (e) {
-      alert(e.response?.data?.error || 'Error adding IMEIs')
+      showAlert(e.response?.data?.error || 'Error adding IMEIs')
     } finally { setSaving(false) }
   }
   const inStock = imeis.filter(i => i.status === 'IN_STOCK')
@@ -233,15 +234,15 @@ export default function Products() {
       load()
 
       if (!editProduct && form.hasImei && response?.data?.imeiSummary) {
-        alert(`Product saved. IMEI summary: ${formatImeiSummary(response.data.imeiSummary)}`)
+        showAlert(`Product saved. IMEI summary: ${formatImeiSummary(response.data.imeiSummary)}`)
       }
     } catch (e) { setFormError(e.response?.data?.error || 'The product could not be saved. Please try again.') } finally { setSaving(false) }
   }
 
   const deactivate = async id => {
-    if (!confirm('Deactivate product?')) return
+    if (!await askConfirm('Deactivate product?')) return
     try { await api.delete(`/products/${id}`); load() }
-    catch (e) { alert(e.response?.data?.error || 'The product could not be deactivated.') }
+    catch (e) { showAlert(e.response?.data?.error || 'The product could not be deactivated.') }
   }
 
   return (
@@ -389,6 +390,10 @@ export default function Products() {
                 <label className="label">IMEI Numbers (one per line)</label>
                 <textarea className="input h-24 resize-none font-mono text-xs" placeholder={"350000000000001\n350000000000002"} value={form.imeiNumbers} onChange={e => setForm(f => ({...f, imeiNumbers: e.target.value}))}/>
               </div>
+            )}
+
+            {editProduct && !(can('products.edit') && can('products.editPrice') && can('products.editStock')) && (
+              <p className="text-white/60 text-xs">Greyed-out fields need extra permission. Ask the owner if you need to change them.</p>
             )}
 
             {formError && (

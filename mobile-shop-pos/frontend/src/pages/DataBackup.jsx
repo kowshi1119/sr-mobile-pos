@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import api from '../api/client'
 import { useTheme } from '../context/ThemeContext'
 import { useAuth } from '../context/AuthContext'
+import { askText } from '../dialogs'
 
 function ActionButton({ icon, label, onClick, variant = 'primary', disabled = false }) {
   const base = variant === 'danger'
@@ -72,7 +73,8 @@ export default function DataBackup() {
   }
 
   const handleReset = async () => {
-    const confirmText = window.prompt('Type RESET to clear business data')
+    // window.prompt is not supported in Electron, so the typed confirmation uses the in-app dialog.
+    const confirmText = await askText('This clears all business data (products, customers, sales, repairs and more). Staff logins are kept. Type RESET to continue.', { title: 'Reset all data', expect: 'RESET', confirmLabel: 'Reset data', danger: true })
     if (confirmText !== 'RESET') {
       setMessage('Reset cancelled.')
       return

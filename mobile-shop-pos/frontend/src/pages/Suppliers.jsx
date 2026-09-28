@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import api from '../api/client'
+import { showAlert } from '../dialogs'
 
 function Modal({ title, onClose, children, maxWidth = 'max-w-3xl' }) {
   return (
@@ -73,12 +74,12 @@ export default function Suppliers() {
       const { data } = await api.get(`/suppliers/${supplier.id}`)
       setDetail(data)
     } catch (e) {
-      alert(e.response?.data?.error || 'Failed to load supplier')
+      showAlert(e.response?.data?.error || 'Failed to load supplier')
     }
   }
 
   const saveSupplier = async () => {
-    if (!form.name.trim()) return alert('Supplier name is required')
+    if (!form.name.trim()) return showAlert('Supplier name is required')
     setSaving(true)
     try {
       if (selected) {
@@ -89,7 +90,7 @@ export default function Suppliers() {
       setShowModal(false)
       load()
     } catch (e) {
-      alert(e.response?.data?.error || 'Failed to save supplier')
+      showAlert(e.response?.data?.error || 'Failed to save supplier')
     } finally {
       setSaving(false)
     }
@@ -127,7 +128,7 @@ export default function Suppliers() {
         quantity: Number(i.quantity) || 0,
         unitCost: Number(i.unitCost) || 0
       }))
-    if (cleanedItems.length === 0) return alert('Add at least one purchase item')
+    if (cleanedItems.length === 0) return showAlert('Add at least one purchase item')
 
     setSaving(true)
     try {
@@ -142,7 +143,7 @@ export default function Suppliers() {
       openDetail(detail)
       load()
     } catch (e) {
-      alert(e.response?.data?.error || 'Failed to record purchase')
+      showAlert(e.response?.data?.error || 'Failed to record purchase')
     } finally {
       setSaving(false)
     }
