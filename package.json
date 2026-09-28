@@ -15,7 +15,8 @@
     "test": "node --test mobile-shop-pos/desktop/test/*.test.js",
     "postinstall": "npm ci --prefix mobile-shop-pos/frontend",
     "test:desktop": "electron mobile-shop-pos/desktop/test/electron-smoke.cjs",
-    "test:desktop:typing": "electron mobile-shop-pos/desktop/test/typing-qa.cjs"
+    "test:desktop:typing": "electron mobile-shop-pos/desktop/test/typing-qa.cjs",
+    "test:desktop:sales": "electron mobile-shop-pos/desktop/test/sales-qa.cjs"
   },
   "dependencies": {
     "@prisma/client": "5.22.0",

@@ -2,7 +2,7 @@
 // so typing is proven through the same path as a physical keyboard, never by assigning input.value.
 const {spawn}=require('child_process');const path=require('path');const {screen}=require('electron');
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-const VK={BACK:8,TAB:9,ENTER:13,ESC:27,SPACE:32,END:35,HOME:36,LEFT:37,UP:38,RIGHT:39,DOWN:40,DELETE:46,A:65,C:67,V:86,F4:115};
+const VK={BACK:8,TAB:9,ENTER:13,ESC:27,SPACE:32,END:35,HOME:36,LEFT:37,UP:38,RIGHT:39,DOWN:40,DELETE:46,A:65,C:67,V:86,F4:115,F12:123};
 
 class OsInput {
   constructor(){
@@ -17,7 +17,7 @@ class OsInput {
 // Real input events injected into Chromium's input pipeline (hit-testing, focus, key handling).
 // Used when the Windows desktop is locked; it cannot reproduce Win32-level bugs such as the
 // Electron alert()/confirm() WM_CHAR issue, which needs QA_INPUT=os on an unlocked desktop.
-const KEYCODE={8:'Backspace',9:'Tab',13:'Enter',27:'Escape',32:'Space',35:'End',36:'Home',37:'Left',38:'Up',39:'Right',40:'Down',46:'Delete',65:'A',67:'C',86:'V',115:'F4'};
+const KEYCODE={8:'Backspace',9:'Tab',13:'Enter',27:'Escape',32:'Space',35:'End',36:'Home',37:'Left',38:'Up',39:'Right',40:'Down',46:'Delete',65:'A',67:'C',86:'V',115:'F4',123:'F12'};
 class ChromiumInput {
   constructor(win){this.win=win;}
   async cmd(line){
@@ -25,6 +25,7 @@ class ChromiumInput {
     if(p[0]==='target'||p[0]==='activate')return 'ok';
     if(p[0]==='fg')return 'ok '+this.win.isFocused();
     if(p[0]==='wheel'){wc.focus();wc.sendInputEvent({type:'mouseWheel',x:+p[1],y:+p[2],deltaX:0,deltaY:+p[3],canScroll:true});return 'ok';}
+    if(p[0]==='dblclick'){const x=+p[1],y=+p[2];wc.focus();wc.sendInputEvent({type:'mouseMove',x,y});for(const clickCount of [1,2]){wc.sendInputEvent({type:'mouseDown',x,y,button:'left',clickCount});wc.sendInputEvent({type:'mouseUp',x,y,button:'left',clickCount});}return 'ok';}
     if(p[0]==='click'){const x=+p[1],y=+p[2];wc.focus();for(const type of ['mouseMove','mouseDown','mouseUp'])wc.sendInputEvent({type,x,y,button:'left',clickCount:1});return 'ok';}
     if(p[0]==='text'){wc.focus();for(const ch of Buffer.from(p[1],'base64').toString('utf8')){wc.sendInputEvent({type:'keyDown',keyCode:ch});wc.sendInputEvent({type:'char',keyCode:ch});wc.sendInputEvent({type:'keyUp',keyCode:ch});await sleep(8);}return 'ok';}
     if(p[0]==='key'){wc.focus();const keyCode=KEYCODE[p[1]];const modifiers=p.slice(2).map(m=>m==='ctrl'?'control':m);wc.sendInputEvent({type:'keyDown',keyCode,modifiers});if(!modifiers.includes('control')&&(keyCode.length===1||keyCode==='Space'||keyCode==='Enter'))wc.sendInputEvent({type:'char',keyCode:keyCode==='Space'?' ':keyCode==='Enter'?String.fromCharCode(13):keyCode.toLowerCase(),modifiers});wc.sendInputEvent({type:'keyUp',keyCode,modifiers});return 'ok';}
@@ -75,6 +76,7 @@ class Driver {
     }
     return 'still hidden';
   }
+  async dblclick(d){await this.reveal(d);const p=await this.locate(d);await this.os.cmd(`dblclick ${p.sx} ${p.sy}`);await sleep(250);return p;}
   async click(d){const revealed=await this.reveal(d);const p=await this.locate(d);p.revealed=revealed;await this.os.cmd(`click ${p.sx} ${p.sy}`);await sleep(250);return p;}
   async type(text){await this.os.cmd('text '+Buffer.from(text,'utf8').toString('base64'));await sleep(150);}
   async key(vk,...mods){await this.os.cmd(['key',vk,...mods].join(' '));await sleep(120);}

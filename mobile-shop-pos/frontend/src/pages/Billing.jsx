@@ -330,14 +330,17 @@ export default function Billing() {
   // Only users with the sales.changePrice permission see the price field (the server checks it too).
   const setUnitPrice = (key, value) => setCart(c => c.map(i => i.key === key ? { ...i, unitPrice: value === '' ? '' : Math.max(0, Number(value)) } : i))
 
-  const subtotal = cart.reduce((s, i) => s + (Number(i.unitPrice) || 0) * i.quantity, 0)
+  // Money on screen and sent to the server is rounded to cents: adding 0.10 three times in floating point
+  // gives 0.30000000000000004, which the server rightly rejects (credit sales with decimal prices failed).
+  const cents = n => Math.round((n + Number.EPSILON) * 100) / 100
+  const subtotal = cents(cart.reduce((s, i) => s + (Number(i.unitPrice) || 0) * i.quantity, 0))
   const loyaltyDiscount = redeemPoints || 0
-  const discountValue = (discount.amount > 0
+  const discountValue = cents((discount.amount > 0
     ? discount.type === 'PERCENT'
       ? Math.round(subtotal * Math.min(discount.amount, 100) / 100)
       : Math.min(discount.amount, subtotal)
-    : 0) + loyaltyDiscount
-  const total = Math.max(0, subtotal - discountValue)
+    : 0) + loyaltyDiscount)
+  const total = cents(Math.max(0, subtotal - discountValue))
 
   // Keep creditAmount in sync with total when credit sale is on
   useEffect(() => {
@@ -352,7 +355,7 @@ export default function Billing() {
       const { data } = await api.post('/sales', {
         customer,
         paymentMethod,
-        creditAmount: creditSale ? parseFloat(creditAmount) || 0 : 0,
+        creditAmount: creditSale ? cents(parseFloat(creditAmount) || 0) : 0,
         discountAmount: Number(discountValue.toFixed(2)),
         discountType: discount.type === 'PERCENT' ? `${discount.amount}%` : (redeemPoints > 0 ? `FIXED + ${redeemPoints}pts` : 'FIXED'),
         loyaltyPoints: redeemPoints || 0,
@@ -380,7 +383,7 @@ export default function Billing() {
       setLoyaltyAccount(null)
       setRedeemPoints(0); setRedeemText('')
       setShowLoyalty(false)
-      navigate('/sale-success', { state: { sale: data.sale, invoiceNumber: data.invoiceNumber, qrDataUrl: data.qrDataUrl } })
+      navigate('/sale-success', { state: { sale: data.sale, invoiceNumber: data.invoiceNumber, qrDataUrl: data.qrDataUrl, integrationNotice: data.integrationNotice } })
     } catch (e) { showAlert(e.response?.data?.error || 'Sale failed'); setSubmitting(false) }
   }
 
