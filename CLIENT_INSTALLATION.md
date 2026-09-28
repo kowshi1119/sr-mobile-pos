@@ -4,20 +4,29 @@ Use the installer supplied by your shop's software provider. Do not use a develo
 
 ## New installation
 
-1. Download or copy SR-Mobile-POS-Setup-1.1.0.exe to your Windows computer.
+1. Copy **SR-Mobile-POS-1.1.1-Windows.zip** to the computer, right-click it and choose **Extract All**, then open the extracted folder.
 2. Close any running copy of SR Mobile POS.
-3. Double-click the installer and follow the installation screens.
+3. Double-click **SR-Mobile-POS-Setup-1.1.1.exe** and follow the installation screens. If Windows shows "Windows protected your PC", click **More info → Run anyway** only if the file came directly from your provider (the installer is not yet code-signed).
 4. Open SR Mobile POS from the desktop or Start Menu.
 5. On first launch, create the **owner account**: your name, a username (for example `owner`) and a private password with at least 12 characters. Store it safely. There is no default password.
 6. Open **Products → Add Product**. If you have no categories yet, type a category name (for example "Mobile Phones") in the product form and press **Add category**, then fill in the product name and selling price. Cost price is optional.
 
 Your computer does not need Node.js, PostgreSQL, Git or other developer tools. Products, customers, sales and other business records stay on this computer. The app remembers your sign-in and light/dark choice between restarts. AI and WhatsApp need internet and service configuration; if they fail, the sale is still saved. Local invoice QR codes are record references, not internet links.
 
+## Updating from version 1.1.0 (most shops)
+
+1. Open **Data & Backup → Backup Data** and save a copy to a USB drive.
+2. Close SR Mobile POS (click Logout, then close the window).
+3. Extract the ZIP and run **SR-Mobile-POS-Setup-1.1.1.exe**. It installs over 1.1.0.
+4. Open SR Mobile POS and sign in as usual. Products, customers, sales, staff logins and settings are kept.
+
+In 1.1.1 the **Scan** and **AI** buttons are in the top bar instead of floating at the bottom-right corner.
+
 ## Updating from version 1.0.0
 
 1. In the old version, open **Data & Backup → Backup Data** and save a copy to a USB drive.
 2. Close SR Mobile POS.
-3. Run SR-Mobile-POS-Setup-1.1.0.exe. It installs over the old version; your shop data is kept.
+3. Run SR-Mobile-POS-Setup-1.1.1.exe. It installs over the old version; your shop data is kept.
 4. Open the app and sign in with the **same email and password you used in 1.0.0**. That login becomes the owner account. You can keep using the email as your username.
 
 ## Staff logins and permissions

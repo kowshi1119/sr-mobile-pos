@@ -174,4 +174,4 @@ app.on('browser-window-created',(_,win)=>win.webContents.on('did-finish-load',as
   } catch(err){checks.push({name:'harness',status:'FAIL',error:err.stack});}
   finally{save();d.close();const failed=checks.filter(c=>c.status==='FAIL').length,skipped=checks.filter(c=>c.status==='BLOCKED').length;console.log(`RESULT ${checks.length-failed-skipped}/${checks.length} passed, ${failed} failed, ${skipped} blocked`);app.exit(failed?1:0);}
 }));
-require('../main');
+require(process.env.QA_APP_MAIN||'../main');   // QA_APP_MAIN points at a packaged app.asar main.js

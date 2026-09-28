@@ -65,12 +65,14 @@ app.on('browser-window-created',(_,win)=>win.webContents.on('did-finish-load',as
     await check('WhatsApp opt-in sale with internet blocked: sale saved, clear notice, no freeze',async()=>{
       win.webContents.session.webRequest.onBeforeRequest({urls:['https://*/*','http://*/*']},(dt,cb)=>cb({cancel:!dt.url.startsWith('http://127.0.0.1:')}));
       await openBilling();await addItem('cheap');await d.click({placeholder:'Customer name'});await d.type('Offline WA');await d.click({placeholder:'Phone number'});await d.type('0775556667');
-      await d.click({css:'input.accent-brand'});const t0=Date.now();await d.click({button:'Complete Sale'});await finishSale();const ms=Date.now()-t0;
+      const before=await d.js(`document.querySelector('input.accent-brand')?.checked`);
+      const hit=await d.click({css:'input.accent-brand'});await sleep(300);
+      const optIn=await d.js(`document.querySelector('input.accent-brand')?.checked`);expect(optIn===true,'WhatsApp opt-in box was not ticked by the click: '+JSON.stringify({before,after:optIn,hit}));const t0=Date.now();await d.click({button:'Complete Sale'});await finishSale();const ms=Date.now()-t0;
       const text=await d.js('document.body.innerText');expect(ms<12000,'took '+ms+' ms');
-      const notice=(text.match(/[^\n]*WhatsApp[^\n]*not sent[^\n]*/)||[])[0];expect(notice,'receipt page does not tell the user the WhatsApp message was not sent');
+      const notice=(text.match(/[^\n]*WhatsApp[^\n]*not sent[^\n]*/)||[])[0];expect(notice,'receipt page does not tell the user the WhatsApp message was not sent; receipt text starts: '+text.slice(0,300).replace(/\n+/g,' | '));
       return {ms,notice};
     });
   } catch(err){checks.push({name:'harness',status:'FAIL',error:err.stack});}
   finally{save();d.close();const failed=checks.filter(c=>c.status==='FAIL').length;console.log(`RESULT ${checks.length-failed}/${checks.length} passed`);app.exit(failed?1:0);}
 }));
-require('../main');
+require(process.env.QA_APP_MAIN||'../main');   // QA_APP_MAIN points at a packaged app.asar main.js

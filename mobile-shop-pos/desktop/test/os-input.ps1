@@ -23,6 +23,9 @@ public static class QaInput {
   [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
   [DllImport("user32.dll")] public static extern bool BringWindowToTop(IntPtr h);
+  [StructLayout(LayoutKind.Sequential)] public struct POINT { public int X, Y; }
+  [DllImport("user32.dll")] public static extern IntPtr WindowFromPoint(POINT p);
+  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
   static void Send(INPUT i) { SendInput(1, new[] { i }, Marshal.SizeOf(typeof(INPUT))); }
   public static void Mouse(uint flags, uint data) { var i = new INPUT { type = 0 }; i.u.mi.dwFlags = flags; i.u.mi.mouseData = data; Send(i); }
   public static void Key(ushort vk, ushort scan, uint flags) { var i = new INPUT { type = 1 }; i.u.ki.wVk = vk; i.u.ki.wScan = scan; i.u.ki.dwFlags = flags; Send(i); }
@@ -43,10 +46,12 @@ while ($null -ne ($line = [Console]::In.ReadLine())) {
     switch ($p[0]) {
       'target' { $target = [IntPtr][Int64]$p[1]; 'ok' }
       'activate' { Activate; Guard; 'ok' }
+      # Which program's window is really under a screen point (another app's popup can cover ours).
+      'whoat' { $pt = New-Object QaInput+POINT; $pt.X = [int]$p[1]; $pt.Y = [int]$p[2]; $h = [QaInput]::WindowFromPoint($pt); $root = [QaInput]::GetAncestor($h, 2); $procId = 0; [QaInput]::GetWindowThreadProcessId($root, [ref]$procId) | Out-Null; $name = (Get-Process -Id $procId -ErrorAction SilentlyContinue).ProcessName; "ok $(($root -eq $target) -or ([QaInput]::GetAncestor($root, 3) -eq $target)) $name" }
       'fg' { $fg = [QaInput]::GetForegroundWindow(); "ok $(Foreground) fg=$fg root=$([QaInput]::GetAncestor($fg, 3)) target=$target" }
       'click' { Click $p[1] $p[2]; 'ok' }
       'dblclick' { Click $p[1] $p[2]; Start-Sleep -Milliseconds 60; [QaInput]::Mouse(0x0002, 0); [QaInput]::Mouse(0x0004, 0); 'ok' }
-      'wheel' { [QaInput]::SetCursorPos([int]$p[1], [int]$p[2]) | Out-Null; Guard; [QaInput]::Mouse(0x0800, [uint32]([int]$p[3] -band 0xFFFFFFFF)); 'ok' }
+      'wheel' { [QaInput]::SetCursorPos([int]$p[1], [int]$p[2]) | Out-Null; Guard; [QaInput]::Mouse(0x0800, [BitConverter]::ToUInt32([BitConverter]::GetBytes([int]$p[3]), 0)); 'ok' }
       'text' {
         Guard
         $s = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($p[1]))

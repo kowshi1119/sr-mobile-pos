@@ -49,7 +49,7 @@ class Driver {
   js(code){return this.win.webContents.executeJavaScript(code);}
   async start(){
     this.win.setAlwaysOnTop(true,'screen-saver');this.win.show();this.win.focus();
-    const hwnd=this.win.getNativeWindowHandle().readBigUInt64LE(0);await this.os.cmd('target '+hwnd);await this.inject();
+    const hwnd=this.win.getNativeWindowHandle().readBigUInt64LE(0);await this.os.cmd('target '+hwnd);await this.front();await this.inject();
   }
   inject(){return this.js(LOCATOR);}
   async go(route){await this.win.loadURL(new URL(route,this.win.webContents.getURL()).href);await sleep(800);await this.inject();}
@@ -60,7 +60,9 @@ class Driver {
     if(!r)throw Error('Element not found: '+JSON.stringify(d));
     const cb=this.win.getContentBounds();const scale=screen.getDisplayMatching(cb).scaleFactor;
     if(this.mode!=='os')return {...r,sx:Math.round(r.x),sy:Math.round(r.y)};
-    return {...r,sx:Math.round((cb.x+r.x)*scale),sy:Math.round((cb.y+r.y)*scale)};
+    const sx=Math.round((cb.x+r.x)*scale),sy=Math.round((cb.y+r.y)*scale);
+    const who=(await this.os.cmd(`whoat ${sx} ${sy}`)).split(' ');   // e.g. "ok False Teams"
+    return {...r,sx,sy,osWindowIsPos:who[1]==='True',osWindowOwner:who.slice(2).join(' ')};
   }
   // Like a user: if the field is scrolled out of its panel, turn the mouse wheel over that panel until it shows.
   async reveal(d){
@@ -72,14 +74,24 @@ class Driver {
       if(v==='visible'||v===null)return v;
       const cb=this.win.getContentBounds();const scale=this.mode==='os'?screen.getDisplayMatching(cb).scaleFactor:1;
       const x=this.mode==='os'?Math.round((cb.x+v.x)*scale):Math.round(v.x),y=this.mode==='os'?Math.round((cb.y+v.y)*scale):Math.round(v.y);
-      await this.os.cmd(`wheel ${x} ${y} ${v.dir>0?-120:120}`);await sleep(150);
+      await this.front();await this.send(`wheel ${x} ${y} ${v.dir>0?-120:120}`);await sleep(150);
     }
     return 'still hidden';
   }
-  async dblclick(d){await this.reveal(d);const p=await this.locate(d);await this.os.cmd(`dblclick ${p.sx} ${p.sy}`);await sleep(250);return p;}
-  async click(d){const revealed=await this.reveal(d);const p=await this.locate(d);p.revealed=revealed;await this.os.cmd(`click ${p.sx} ${p.sy}`);await sleep(250);return p;}
-  async type(text){await this.os.cmd('text '+Buffer.from(text,'utf8').toString('base64'));await sleep(150);}
-  async key(vk,...mods){await this.os.cmd(['key',vk,...mods].join(' '));await sleep(120);}
+  async dblclick(d){await this.reveal(d);await this.settle(d);const p=await this.locate(d);await this.front();await this.os.cmd(`dblclick ${p.sx} ${p.sy}`);await sleep(250);return p;}
+  // With real OS input, a click that arrives while another window is in front only activates the POS
+  // window and never reaches the page, so make sure the POS window is in front first.
+  // Activate with a plain click on empty header space: tapping Alt (the usual trick) opens the app's
+  // menu bar, and the next clicks/keys then go to the menu instead of the page.
+  async front(){if(this.mode!=='os')return;const r=await this.os.cmd('fg');if(/^ok True/.test(r))return;
+    const cb=this.win.getContentBounds();const scale=screen.getDisplayMatching(cb).scaleFactor;
+    await this.os.cmd(`click ${Math.round((cb.x+cb.width*0.35)*scale)} ${Math.round((cb.y+30)*scale)}`);await sleep(250);}
+  // Wheel scrolling is animated; wait until the element stops moving so the click lands where it is now.
+  async settle(d){let last='';for(let i=0;i<20;i++){const r=await this.js(`(()=>{const e=__find(${JSON.stringify(d)});if(!e)return '';const b=e.getBoundingClientRect();return Math.round(b.x)+','+Math.round(b.y)})()`);if(r&&r===last)return;last=r;await sleep(60);}}
+  async click(d){const revealed=await this.reveal(d);await this.settle(d);const p=await this.locate(d);p.revealed=revealed;await this.front();await this.os.cmd(`click ${p.sx} ${p.sy}`);await sleep(250);return p;}
+  async send(line){try{return await this.os.cmd(line);}catch(e){if(this.mode!=='os'||!/foreground/.test(e.message))throw e;await this.front();return this.os.cmd(line);}}
+  async type(text){await this.send('text '+Buffer.from(text,'utf8').toString('base64'));await sleep(150);}
+  async key(vk,...mods){await this.send(['key',vk,...mods].join(' '));await sleep(120);}
   value(d){return this.js(`(()=>{const e=__find(${JSON.stringify(d)});return e?e.value:null})()`);}
   active(){return this.js(`(()=>{const e=document.activeElement;return e?(e.tagName+'|'+(e.placeholder||e.name||e.id||'')):null})()`);}
   text(){return this.js('document.body.innerText');}

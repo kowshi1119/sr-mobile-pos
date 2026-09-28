@@ -59,4 +59,4 @@ app.on('browser-window-created',(_,win)=>win.webContents.on('did-finish-load',as
   } catch(err){results.error=err.stack;fs.writeFileSync(path.join(outDir,'typing-repro.json'),JSON.stringify(results,null,2));}
   finally{d.close();app.exit(0);}
 }));
-require('../main');
+require(process.env.QA_APP_MAIN||'../main');   // QA_APP_MAIN points at a packaged app.asar main.js

@@ -3,7 +3,7 @@
 const {app}=require('electron');const fs=require('fs');const path=require('path');const os=require('os');const assert=require('assert/strict');
 const secondary=process.argv.includes('--secondary');
 const userData=secondary?process.argv[process.argv.indexOf('--secondary')+1]:fs.mkdtempSync(path.join(os.tmpdir(),'sr-pos-electron-'));app.setPath('userData',userData);
-if(secondary){require('../main');}else{
+if(secondary){require(process.env.QA_APP_MAIN||'../main');}else{
 const outDir=process.env.SMOKE_OUT||path.resolve(__dirname,'../../../..');fs.mkdirSync(outDir,{recursive:true});
 const output=path.join(outDir,'electron-smoke.json');
 const shots=path.join(outDir,'screenshots');fs.mkdirSync(shots,{recursive:true});
@@ -112,6 +112,6 @@ app.on('browser-window-created',(_,win)=>{
     }catch(error){try{result.failureScreenshot=await shot('failure');result.failureText=(await js('document.body.innerText')).slice(0,1500);result.failureUrl=await js('location.pathname');}catch{}fs.writeFileSync(output,JSON.stringify({pass:false,error:error.message,...result,userData},null,2));clearTimeout(watchdog);app.exit(1);}
   });
 });
-require('../main');
+require(process.env.QA_APP_MAIN||'../main');   // QA_APP_MAIN points at a packaged app.asar main.js
 
 }

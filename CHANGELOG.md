@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.1.1 — 2026-09-28 (test candidate)
+
+### Fixed
+- New Sale customer phone/WhatsApp fields could not be typed into: the floating Scan Product and AI buttons covered them and opened the camera scanner instead. Both buttons moved to the header.
+- Typing could stop after a pop-up message on Windows (Electron defect with native alert/confirm). All messages and confirmations are now in-app dialogs; Reset data (which relied on the unsupported prompt) works again.
+- Credit sales with decimal prices (e.g. 3 x 0.10) were rejected because of floating-point totals; amounts are rounded to cents.
+- The receipt page now shows when a WhatsApp message was not sent.
+- Discount and loyalty inputs keep what is typed (0, 0.5, 10.).
+- The camera scanners explain when no camera is available.
+- Disabled (permission-locked) fields look disabled.
+
+### Tests
+- Real-input UI suites: `npm run test:desktop:typing` and `npm run test:desktop:sales`; static guard against native dialogs; data-safety tests for newer backups and invalid money.
+
 ## 1.1.0 — 2026-09-24
 
 ### Added
