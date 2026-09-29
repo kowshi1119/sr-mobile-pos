@@ -13,7 +13,11 @@
 - [ ] Clean Windows machine installation tested without Node/PostgreSQL
 - [ ] Desktop and Start Menu shortcuts tested
 - [ ] Add/Remove Programs and uninstall tested
-- [ ] First administrator setup and invalid login tested
+- [ ] First owner setup and invalid login tested
+- [ ] v1.0 admin login works after upgrading (becomes the owner)
+- [ ] Staff login created; Cashier preset limits menu and actions; price/stock/discount/cost restrictions checked
+- [ ] Permission change, disable and password reset apply without the staff member signing out
+- [ ] Light and dark mode checked on every page
 - [ ] Products, variants, stock, IMEI, customers and sales tested
 - [ ] Repairs, debt, loyalty, suppliers, expenses and reports reconciled
 - [ ] Offline operation tested with physical network disconnected

@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../api/client'
+import { useAuth } from '../context/AuthContext'
+import { showAlert } from '../dialogs'
 
 function StatCard({ icon, label, value, sub, color = 'brand' }) {
   return (
@@ -18,6 +20,7 @@ function StatCard({ icon, label, value, sub, color = 'brand' }) {
 const STATUS_COLORS = { RECEIVED:'blue',IN_PROGRESS:'yellow',WAITING_PARTS:'orange',READY:'accent',DELIVERED:'surface-high' }
 
 export default function Dashboard() {
+  const { can } = useAuth()
   const navigate = useNavigate()
   const [summary, setSummary] = useState(null)
   const [lowStock, setLowStock] = useState([])
@@ -49,12 +52,12 @@ export default function Dashboard() {
     try {
       const { data } = await api.post('/whatsapp-summary/send')
       if (data.sent) {
-        alert('Daily summary sent to owner WhatsApp!')
+        showAlert('Daily summary sent to owner WhatsApp!')
       } else {
-        alert('Failed to send. Check WhatsApp config.')
+        showAlert('Failed to send. Check WhatsApp config.')
       }
     } catch (e) {
-      alert(e.response?.data?.error || 'Send failed')
+      showAlert(e.response?.data?.error || 'Send failed')
     }
   }
 
@@ -287,10 +290,10 @@ export default function Dashboard() {
               </svg>
               Daily WhatsApp Summary
             </h3>
-            <button onClick={sendDailySummary} className="btn-primary py-2 px-4 text-sm">
+            {can('notifications.view') && <button onClick={sendDailySummary} className="btn-primary py-2 px-4 text-sm">
               <span className="material-symbols-outlined text-sm fill-icon">send</span>
               Send Now
-            </button>
+            </button>}
           </div>
           <div className="bg-surface-low rounded-xl p-4 font-mono text-xs text-white/60 whitespace-pre-line border border-white/5">
             {summaryPreview.message}

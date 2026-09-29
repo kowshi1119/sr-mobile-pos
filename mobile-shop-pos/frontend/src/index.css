@@ -15,14 +15,22 @@
     --color-surface-highest: 53 53 52;
     --color-surface-lowest: 14 14 14;
     --color-text: 229 226 225;
+    --color-ink: 255 255 255;
   }
 
   html { color-scheme: dark; }
 
   html.light {
     color-scheme: light;
+    --color-ink: 31 24 17;
+    /* Darker brand/accent so text in these colours stays readable (4.5:1+) on the cream background. */
+    --color-brand: 150 90 0;
+    --color-brand-dark: 122 72 0;
+    --color-brand-light: 196 128 16;
+    --color-onbrand: 255 255 255;
+    --color-accent: 4 120 87;
     --color-surface: 255 250 243;
-    --color-surface-low: 249 243 233;
+    --color-surface-low: 245 238 226;
     --color-surface-high: 242 233 219;
     --color-surface-highest: 228 216 197;
     --color-surface-lowest: 247 242 234;
@@ -103,19 +111,30 @@ html.light .nav-item:hover {
 html.light .nav-item.active {
   background: rgba(232, 160, 32, 0.12);
 }
-html.light .text-white { color: rgb(31, 24, 17) !important; }
-html.light [class*='text-white/70'] { color: rgba(31, 24, 17, 0.74) !important; }
-html.light [class*='text-white/60'] { color: rgba(31, 24, 17, 0.68) !important; }
-html.light [class*='text-white/50'] { color: rgba(31, 24, 17, 0.60) !important; }
-html.light [class*='text-white/40'] { color: rgba(31, 24, 17, 0.52) !important; }
-html.light [class*='text-white/30'] { color: rgba(31, 24, 17, 0.44) !important; }
-html.light [class*='text-white/20'] { color: rgba(31, 24, 17, 0.30) !important; }
-html.light [class*='border-white/5'] { border-color: rgba(109, 76, 16, 0.08) !important; }
-html.light [class*='border-white/10'] { border-color: rgba(109, 76, 16, 0.14) !important; }
-html.light [class*='bg-white/3'],
-html.light [class*='bg-white/5'] {
-  background: rgba(232, 160, 32, 0.06) !important;
-}
+/* Light mode: faint white-alpha text becomes dark ink, so it needs more opacity to stay readable.
+   :where() keeps these at utility specificity, so hover:text-white and similar variants still win. */
+:where(html.light) .text-white\/10 { color: rgb(var(--color-ink) / 0.35); }
+:where(html.light) .text-white\/20 { color: rgb(var(--color-ink) / 0.5); }
+:where(html.light) .text-white\/30 { color: rgb(var(--color-ink) / 0.6); }
+:where(html.light) .text-white\/35 { color: rgb(var(--color-ink) / 0.62); }
+:where(html.light) .text-white\/40 { color: rgb(var(--color-ink) / 0.66); }
+:where(html.light) .text-white\/50 { color: rgb(var(--color-ink) / 0.7); }
+:where(html.light) .text-white\/60 { color: rgb(var(--color-ink) / 0.76); }
+:where(html.light) .text-white\/70 { color: rgb(var(--color-ink) / 0.82); }
+:where(html.light) .text-white\/80 { color: rgb(var(--color-ink) / 0.88); }
+html.light .label { color: rgb(var(--color-ink) / 0.66); }
+html.light .input { border-color: rgb(var(--color-ink) / 0.28); }
+html.light .input::placeholder { color: rgb(var(--color-ink) / 0.5); }
+html.light .card { border-color: rgb(var(--color-ink) / 0.1); }
+/* Tailwind's -400 shades are made for dark backgrounds; use darker shades on cream. */
+:where(html.light) .text-red-400 { color: rgb(185 28 28); }
+:where(html.light) .text-orange-400 { color: rgb(194 65 12); }
+:where(html.light) .text-yellow-400 { color: rgb(133 77 14); }
+:where(html.light) .text-blue-400 { color: rgb(29 78 216); }
+:where(html.light) .text-green-400 { color: rgb(22 101 52); }
+
+/* Fields the user may not change must look locked, not editable (e.g. price fields for staff without that permission). */
+.input:disabled, select.input:disabled, textarea.input:disabled { opacity: 0.55; cursor: not-allowed; }
 
 /* Status badge colours */
 .status-received    { @apply bg-blue-500/10 text-blue-400 border border-blue-500/20; }

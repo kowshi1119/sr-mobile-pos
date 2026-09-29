@@ -61,8 +61,14 @@ function migrate(p) {
   const existed = fs.existsSync(p.db);
   if (existed) {
     validate(p.db);
-    const name = 'pre-migration-' + Date.now() + '-' + crypto.randomUUID() + '.db';
-    snapshot(p.db, path.join(p.backups, name));
+    // Snapshot before an upgrade changes the schema; ordinary launches are covered by startup backups.
+    const check = open(p.db, true);
+    let appliedCount;
+    try { appliedCount = check.prepare('SELECT COUNT(*) AS n FROM _DesktopMigration').get().n; } finally { check.close(); }
+    if (appliedCount < migrations().length) {
+      const name = 'pre-migration-' + Date.now() + '-' + crypto.randomUUID() + '.db';
+      snapshot(p.db, path.join(p.backups, name));
+    }
   }
   const target=existed?p.db:p.db+'.initializing';
   if(!existed&&fs.existsSync(target))fs.unlinkSync(target);

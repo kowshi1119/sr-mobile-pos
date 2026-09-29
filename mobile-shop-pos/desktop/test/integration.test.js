@@ -25,7 +25,7 @@ test('local POS lifecycle, business records, security and recovery',async t=>{
     assert.equal((await api('/auth/setup','POST',{email:'qa@example.invalid',password:'qa-only-strong-password'})).status,409);
     assert.equal((await api('/auth/login','POST',{email:'qa@example.invalid',password:'wrong'})).status,401);
     const login=await api('/auth/login','POST',{email:'qa@example.invalid',password:'qa-only-strong-password'});assert.equal(login.status,200);token=login.body.token;
-    assert.equal((await api('/auth/me')).body.role,'admin');
+    assert.equal((await api('/auth/me')).body.role,'OWNER');
   });
   await t.test('category and product create/edit/search',async()=>{
     const category=await api('/categories','POST',{name:'Accessories',warrantyMonths:3});assert.equal(category.status,201);
@@ -51,7 +51,7 @@ test('local POS lifecycle, business records, security and recovery',async t=>{
   });
   await t.test('rejected stock and malformed sales roll back',async()=>{
     const base={customer:{name:'Rollback',phone:'QA-ROLLBACK'},items:[{productId:product.id,unitPrice:1,quantity:100}],paymentMethod:'CASH'};
-    assert.notEqual((await api('/sales','POST',base)).status,201);
+    const rejected=await api('/sales','POST',base);assert.equal(rejected.status,400);assert.match(rejected.body.error,/Insufficient stock/);
     assert.equal((await api('/customers?search=QA-ROLLBACK')).body.length,0);
     assert.equal((await api('/sales','POST',{...base,items:[{productId:product.id,unitPrice:1,quantity:-1}]})).status,400);
     assert.equal((await api('/products/'+product.id)).body.stockQuantity,16);

@@ -16,16 +16,17 @@ if(!app.requestSingleInstanceLock()) { app.quit(); } else {
   app.whenReady().then(async()=>{
     const {pathsFor,migrate}=require('./database-manager');
     paths=pathsFor(app.getPath('userData'));log=require('./logger')(paths.logs);log('startup');
-    console.error=()=>log('backend-error');
-    const settings=require('./settings').loadSettings(paths);
+    console.error=(...args)=>log('backend-error',args.find(a=>a instanceof Error)||{message:args.map(String).join(' ')});
+    const {loadSettings,preferredPort}=require('./settings');const settings=loadSettings(paths);
     process.env.DESKTOP_MODE='1';process.env.DATABASE_URL='file:'+paths.db.replace(/\\/g,'/');process.env.JWT_SECRET=settings.value.jwtSecret;
     // Load only explicit optional integration settings; never inherit developer DB/auth configuration.
     for(const key of ['ADMIN_EMAIL','ADMIN_PASSWORD','GROQ_API_KEY','META_WHATSAPP_TOKEN','META_PHONE_NUMBER_ID','OWNER_WHATSAPP_NUMBER','META_WEBHOOK_VERIFY_TOKEN'])delete process.env[key];
     const integrations=path.join(paths.settings,'integrations.json');
     if(fs.existsSync(integrations)) {const values=JSON.parse(fs.readFileSync(integrations,'utf8'));for(const key of ['GROQ_API_KEY','META_WHATSAPP_TOKEN','META_PHONE_NUMBER_ID','OWNER_WHATSAPP_NUMBER'])if(typeof values[key]==='string')process.env[key]=values[key];}
     migrate(paths);log('database-ready');
+    log('owner-check',{result:await require('../backend/utils/owner').ensureOwner(require('../backend/db').prisma,settings)});
     const capability=crypto.randomBytes(32).toString('hex');
-    runtime=await require('../backend/server').startBackend({paths,settings,capability,log});log('backend-ready');
+    runtime=await require('../backend/server').startBackend({paths,settings,capability,log,port:preferredPort(settings),onPortChange:port=>settings.save({...settings.value,port})});log('backend-ready');
     const {backup,stageRestore,replaceDatabase}=require('./backup-manager');
     backup(paths);
     timer=setInterval(()=>{try{backup(paths);log('scheduled-backup');}catch(err){log('backup-failed',err);window?.webContents.send('pos:backup-failed');}},86400000);
@@ -41,13 +42,18 @@ if(!app.requestSingleInstanceLock()) { app.quit(); } else {
     window=new BrowserWindow({width:1440,height:950,minWidth:1000,minHeight:700,title:'SR Mobile POS',show:false,webPreferences:{preload:path.join(__dirname,'preload.js'),session:ses,contextIsolation:true,nodeIntegration:false,sandbox:true,webSecurity:true}});
     window.webContents.setWindowOpenHandler(()=>({action:'deny'}));
     window.webContents.on('will-navigate',(event,url)=>{if(new URL(url).origin!==runtime.origin)event.preventDefault();});
-    const verify=(event,token)=>{
+    // Backup needs the owner or the data.backup permission; restore is owner-only.
+    const verify=async(event,token,permission)=>{
       if(event.sender!==window.webContents||event.senderFrame!==window.webContents.mainFrame||new URL(event.senderFrame.url).origin!==runtime.origin)throw new Error('Untrusted caller');
-      const user=require('jsonwebtoken').verify(token,settings.value.jwtSecret,{algorithms:['HS256']});if(user.role!=='admin')throw new Error('Administrator required');
+      const claims=require('jsonwebtoken').verify(token,settings.value.jwtSecret,{algorithms:['HS256']});
+      const user=typeof claims.sub==='string'?await require('../backend/db').prisma.user.findUnique({where:{id:claims.sub}}):null;
+      if(!user||!user.isActive||user.tokenVersion!==claims.tv)throw new Error('Session expired');
+      const session=require('../backend/middleware/auth').toSessionUser(user);
+      if(!require('../backend/utils/permissions').has(session,...(permission?[permission]:[])))throw new Error('Permission required');
     };
     ipcMain.handle('pos:backup',async(event,token)=>{
       let ownsBusy=false;
-      try {verify(event,token);if(nativeBusy)return {error:'Another backup operation is in progress'};nativeBusy=true;ownsBusy=true;
+      try {try{await verify(event,token,'data.backup');}catch{return {error:'You do not have permission to back up data.'};}if(nativeBusy)return {error:'Another backup operation is in progress'};nativeBusy=true;ownsBusy=true;
         const selected=await dialog.showSaveDialog(window,{title:'Backup Data',defaultPath:path.join(paths.exports,'SR-Mobile-POS-'+Date.now()+'.db'),filters:[{name:'POS database',extensions:['db']}]});
         if(selected.canceled)return {cancelled:true};
         if(path.extname(selected.filePath).toLowerCase()!=='.db')return {error:'Choose a .db filename'};
@@ -57,10 +63,10 @@ if(!app.requestSingleInstanceLock()) { app.quit(); } else {
     });
     ipcMain.handle('pos:restore',async(event,token)=>{
       let stage,ownsBusy=false;
-      try {verify(event,token);if(nativeBusy)return {error:'Another backup operation is in progress'};nativeBusy=true;ownsBusy=true;
+      try {try{await verify(event,token);}catch{return {error:'Only the owner can restore a backup.'};}if(nativeBusy)return {error:'Another backup operation is in progress'};nativeBusy=true;ownsBusy=true;
         const selected=await dialog.showOpenDialog(window,{title:'Restore Backup',properties:['openFile'],filters:[{name:'POS database',extensions:['db']}]});
         if(selected.canceled)return {cancelled:true};stage=stageRestore(paths,selected.filePaths[0]);
-        const answer=await dialog.showMessageBox(window,{type:'warning',buttons:['Cancel','Restore and restart'],defaultId:0,cancelId:0,message:'Replace shop data with this backup?',detail:'A safety backup of current data will be saved first. Local administrator credentials and images remain unchanged.'});
+        const answer=await dialog.showMessageBox(window,{type:'warning',buttons:['Cancel','Restore and restart'],defaultId:0,cancelId:0,message:'Replace shop data with this backup?',detail:'A safety backup of current data will be saved first. Staff accounts are replaced by the ones in the backup; your owner login keeps working. Images remain unchanged.'});
         if(answer.response!==1)return {cancelled:true};
         clearInterval(timer);await runtime.close();runtime=null;replaceDatabase(paths,stage);stage=null;log('restore-complete');
         quitting=true;app.relaunch();app.quit();return {restored:true};

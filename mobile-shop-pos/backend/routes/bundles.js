@@ -1,3 +1,5 @@
+const { sendError, badRequest } = require('../utils/errors');
+const { requirePermission } = require('../middleware/auth');
 const router = require('express').Router()
 const { prisma } = require('../db');
 const auth = require('../middleware/auth')
@@ -27,11 +29,11 @@ router.get('/', auth, async (req, res) => {
     })
     res.json(bundles)
   } catch (e) {
-    res.status(500).json({ error: e.message })
+    sendError(res, e)
   }
 })
 
-router.post('/', auth, async (req, res) => {
+router.post('/', requirePermission('bundles.manage'), async (req, res) => {
   try {
     const { name, description, bundlePrice, items } = req.body
     if (!name || !bundlePrice || !items?.length) {
@@ -53,11 +55,11 @@ router.post('/', auth, async (req, res) => {
     })
     res.status(201).json(bundle)
   } catch (e) {
-    res.status(500).json({ error: e.message })
+    sendError(res, e)
   }
 })
 
-router.patch('/:id', auth, async (req, res) => {
+router.patch('/:id', requirePermission('bundles.manage'), async (req, res) => {
   try {
     const { name, description, bundlePrice, isActive } = req.body
     const bundle = await prisma.bundle.update({
@@ -71,7 +73,7 @@ router.patch('/:id', auth, async (req, res) => {
     })
     res.json(bundle)
   } catch (e) {
-    res.status(500).json({ error: e.message })
+    sendError(res, e)
   }
 })
 

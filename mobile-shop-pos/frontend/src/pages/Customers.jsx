@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import api from '../api/client'
+import { useAuth } from '../context/AuthContext'
+import { showAlert, askConfirm } from '../dialogs'
 
 export default function Customers() {
+  const { can } = useAuth()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const [customers, setCustomers] = useState([])
@@ -21,7 +24,7 @@ export default function Customers() {
   const displayed = debtorsOnly ? customers.filter(c => Number(c.totalDebt) > 0) : customers
 
   const deactivate = async (c) => {
-    if (!window.confirm(`Deactivate ${c.name}? They will be hidden from the default list.`)) return
+    if (!await askConfirm(`Deactivate ${c.name}? They will be hidden from the default list.`)) return
     await api.patch(`/customers/${c.id}/deactivate`)
     load()
   }
@@ -32,18 +35,18 @@ export default function Customers() {
   }
 
   const deleteCustomer = async (c) => {
-    if (!window.confirm(`Delete ${c.name} permanently? This cannot be undone.`)) return
+    if (!await askConfirm(`Delete ${c.name} permanently? This cannot be undone.`)) return
     try {
       await api.delete(`/customers/${c.id}`)
       load()
     } catch (e) {
       if (e.response?.data?.canDeactivate) {
-        if (window.confirm(`${e.response.data.error}\n\nDeactivate instead?`)) {
+        if (await askConfirm(`${e.response.data.error}\n\nDeactivate instead?`)) {
           await api.patch(`/customers/${c.id}/deactivate`)
           load()
         }
       } else {
-        alert(e.response?.data?.error || 'Delete failed')
+        showAlert(e.response?.data?.error || 'Delete failed')
       }
     }
   }
@@ -119,7 +122,7 @@ export default function Customers() {
                       <button onClick={() => navigate(`/customers/${c.id}`)} className="btn-ghost py-1 px-2 text-xs" title="View">
                         <span className="material-symbols-outlined text-sm">open_in_new</span>
                       </button>
-                      {c.isActive ? (
+                      {!can('customers.manage') ? null : c.isActive ? (
                         <>
                           <button onClick={() => deactivate(c)} className="btn-ghost py-1 px-2 text-xs text-orange-400 hover:text-orange-300" title="Deactivate">
                             <span className="material-symbols-outlined text-sm">visibility_off</span>

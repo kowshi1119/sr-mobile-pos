@@ -1,3 +1,5 @@
+const { sendError, badRequest } = require('../utils/errors');
+const { requirePermission } = require('../middleware/auth');
 const router = require('express').Router()
 const { prisma } = require('../db');
 const auth = require('../middleware/auth')
@@ -5,7 +7,7 @@ const auth = require('../middleware/auth')
 const POINTS_PER_LKR = 10 / 1000
 const POINTS_REDEEM_RATE = 1
 
-router.get('/customer/:customerId', auth, async (req, res) => {
+router.get('/customer/:customerId', requirePermission('customers.view', 'sales.create', 'loyalty.manage'), async (req, res) => {
   try {
     let account = await prisma.loyaltyAccount.findUnique({
       where: { customerId: req.params.customerId },
@@ -32,11 +34,11 @@ router.get('/customer/:customerId', auth, async (req, res) => {
 
     res.json(account)
   } catch (e) {
-    res.status(500).json({ error: e.message })
+    sendError(res, e)
   }
 })
 
-router.post('/earn', auth, async (req, res) => {
+router.post('/earn', requirePermission('sales.create', 'loyalty.manage'), async (req, res) => {
   try {
     const { customerId, saleId, saleAmount } = req.body
     if (!customerId || !saleAmount) {
@@ -71,11 +73,11 @@ router.post('/earn', auth, async (req, res) => {
 
     res.json({ pointsEarned, totalPoints: updated.points })
   } catch (e) {
-    res.status(500).json({ error: e.message })
+    sendError(res, e)
   }
 })
 
-router.post('/redeem', auth, async (req, res) => {
+router.post('/redeem', requirePermission('sales.create', 'loyalty.manage'), async (req, res) => {
   try {
     const { customerId, pointsToRedeem } = req.body
     if (!customerId || !pointsToRedeem) {
@@ -109,11 +111,11 @@ router.post('/redeem', auth, async (req, res) => {
 
     res.json({ discountValue, pointsUsed: pointsToRedeem })
   } catch (e) {
-    res.status(500).json({ error: e.message })
+    sendError(res, e)
   }
 })
 
-router.get('/leaderboard', auth, async (req, res) => {
+router.get('/leaderboard', requirePermission('customers.view', 'loyalty.manage'), async (req, res) => {
   try {
     const accounts = await prisma.loyaltyAccount.findMany({
       where: { points: { gt: 0 } },
@@ -125,7 +127,7 @@ router.get('/leaderboard', auth, async (req, res) => {
     })
     res.json(accounts)
   } catch (e) {
-    res.status(500).json({ error: e.message })
+    sendError(res, e)
   }
 })
 

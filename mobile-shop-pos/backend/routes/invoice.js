@@ -1,3 +1,4 @@
+const { sendError, badRequest } = require('../utils/errors');
 const express = require('express');
 const router = express.Router();
 const { prisma } = require('../db');
@@ -22,7 +23,7 @@ router.get('/:invoiceNumber', async (req, res) => {
     });
 
     res.json({ sale, repair });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { sendError(res, err); }
 });
 
 module.exports = router;

@@ -1,6 +1,8 @@
 import { useRef, useState } from 'react'
 import api from '../api/client'
 import { useTheme } from '../context/ThemeContext'
+import { useAuth } from '../context/AuthContext'
+import { askText } from '../dialogs'
 
 function ActionButton({ icon, label, onClick, variant = 'primary', disabled = false }) {
   const base = variant === 'danger'
@@ -18,6 +20,7 @@ function ActionButton({ icon, label, onClick, variant = 'primary', disabled = fa
 }
 
 export default function DataBackup() {
+  const { isOwner } = useAuth()
   const fileRef = useRef(null)
   const { theme, setTheme } = useTheme()
   const [busy, setBusy] = useState('')
@@ -70,7 +73,8 @@ export default function DataBackup() {
   }
 
   const handleReset = async () => {
-    const confirmText = window.prompt('Type RESET to clear business data')
+    // window.prompt is not supported in Electron, so the typed confirmation uses the in-app dialog.
+    const confirmText = await askText('This clears all business data (products, customers, sales, repairs and more). Staff logins are kept. Type RESET to continue.', { title: 'Reset all data', expect: 'RESET', confirmLabel: 'Reset data', danger: true })
     if (confirmText !== 'RESET') {
       setMessage('Reset cancelled.')
       return
@@ -98,7 +102,7 @@ export default function DataBackup() {
         <p className="text-sm text-white/80">{message}</p>
       </div>
 
-      {window.desktop && <section className="card p-6 space-y-4"><h2 className="text-xl font-bold">Local Database</h2><p>Automatic backups retain 30 generations. Database backups contain business records; copy the uploads folder separately to protect images.</p><div className="flex gap-4"><ActionButton icon="save" label="Backup Data (.db)" onClick={() => nativeAction('backup')} disabled={busy !== ''}/><ActionButton icon="restore" label="Restore Database" onClick={() => nativeAction('restore')} disabled={busy !== ''}/></div></section>}
+      {window.desktop && <section className="card p-6 space-y-4"><h2 className="text-xl font-bold">Local Database</h2><p>Automatic backups retain 30 generations. Database backups contain business records; copy the uploads folder separately to protect images.</p><div className="flex gap-4"><ActionButton icon="save" label="Backup Data (.db)" onClick={() => nativeAction('backup')} disabled={busy !== ''}/>{isOwner && <ActionButton icon="restore" label="Restore Database" onClick={() => nativeAction('restore')} disabled={busy !== ''}/>}</div></section>}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         <section className="card p-6 space-y-5">
           <div>
@@ -114,7 +118,7 @@ export default function DataBackup() {
           />
         </section>
 
-        <section className="card p-6 space-y-5">
+        {isOwner && <section className="card p-6 space-y-5">
           <div>
             <h2 className="font-display font-bold text-xl text-white">Import Data</h2>
             <div className="h-px bg-white/10 mt-4 mb-5" />
@@ -128,9 +132,9 @@ export default function DataBackup() {
             disabled={busy !== ''}
             variant="ghost"
           />
-        </section>
+        </section>}
 
-        <section className="card p-6 space-y-5">
+        {isOwner && <section className="card p-6 space-y-5">
           <div>
             <h2 className="font-display font-bold text-xl text-red-400">Danger Zone</h2>
             <div className="h-px bg-white/10 mt-4 mb-5" />
@@ -143,7 +147,7 @@ export default function DataBackup() {
             disabled={busy !== ''}
             variant="danger"
           />
-        </section>
+        </section>}
 
         <section className="card p-6 space-y-5">
           <div>

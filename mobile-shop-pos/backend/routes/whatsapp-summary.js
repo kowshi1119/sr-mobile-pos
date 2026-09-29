@@ -1,9 +1,11 @@
+const { sendError, badRequest } = require('../utils/errors');
+const { requirePermission } = require('../middleware/auth');
 const router = require('express').Router()
 const { prisma } = require('../db');
 const auth = require('../middleware/auth')
 const { sendWhatsApp } = require('../utils/whatsapp')
 
-router.post('/send', auth, async (req, res) => {
+router.post('/send', requirePermission('notifications.view'), async (req, res) => {
   try {
     const ownerPhone = process.env.OWNER_WHATSAPP_NUMBER
     if (!ownerPhone) {
@@ -61,11 +63,11 @@ router.post('/send', auth, async (req, res) => {
       summary: { orders, revenue, profit, topProduct, pendingRepairs }
     })
   } catch (e) {
-    res.status(500).json({ error: e.message })
+    sendError(res, e)
   }
 })
 
-router.get('/preview', auth, async (req, res) => {
+router.get('/preview', requirePermission('dashboard.view'), async (req, res) => {
   try {
     const today = new Date()
     today.setHours(0, 0, 0, 0)
@@ -116,7 +118,7 @@ router.get('/preview', auth, async (req, res) => {
         `Pending Repairs: ${pendingRepairs}`
     })
   } catch (e) {
-    res.status(500).json({ error: e.message })
+    sendError(res, e)
   }
 })
 

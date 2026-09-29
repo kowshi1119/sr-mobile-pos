@@ -1,9 +1,11 @@
+const { sendError, badRequest } = require('../utils/errors');
+const { requirePermission, requireOwner } = require('../middleware/auth');
 const express = require('express');
 const { prisma } = require('../db');
 const auth = require('../middleware/auth');
 
 const router = express.Router();
-const TRANSACTION_OPTIONS = { maxWait: 10000, timeout: 30000 };
+const TRANSACTION_OPTIONS = { maxWait: 10000, timeout: 300000 }; // Large imports can take minutes on slower PCs.
 
 router.use(auth);
 
@@ -79,7 +81,7 @@ async function clearAllBusinessData(tx) {
   return summary;
 }
 
-router.get('/export', async (req, res) => {
+router.get('/export', requirePermission('data.backup'), async (req, res) => {
   try {
     const data = {};
     for (const [key, reader] of Object.entries(EXPORTERS)) {
@@ -93,11 +95,11 @@ router.get('/export', async (req, res) => {
       data,
     });
   } catch (err) {
-    res.status(500).json({ error: err.message || 'Failed to export data' });
+    sendError(res, err, 'Failed to export data');
   }
 });
 
-router.post('/import', async (req, res) => {
+router.post('/import', requireOwner, async (req, res) => {
   try {
     const merge = req.body?.merge !== false;
     const payload = req.body?.data && typeof req.body.data === 'object' ? req.body.data : req.body;
@@ -148,11 +150,11 @@ router.post('/import', async (req, res) => {
     const importedCount = Object.values(summary).reduce((sum, value) => sum + Number(value || 0), 0);
     res.json({ imported: true, merge, importedCount, summary });
   } catch (err) {
-    res.status(500).json({ error: err.message || 'Failed to import backup' });
+    sendError(res, err, 'Failed to import backup');
   }
 });
 
-router.post('/reset', async (req, res) => {
+router.post('/reset', requireOwner, async (req, res) => {
   try {
     const { confirmText } = req.body || {};
     if (confirmText !== 'RESET') {
@@ -165,7 +167,7 @@ router.post('/reset', async (req, res) => {
 
     res.json({ reset: true, deletedCount, summary });
   } catch (err) {
-    res.status(500).json({ error: err.message || 'Failed to reset data' });
+    sendError(res, err, 'Failed to reset data');
   }
 });
 

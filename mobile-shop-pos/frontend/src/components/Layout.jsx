@@ -4,21 +4,8 @@ import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
 import { ScannerProvider, useScanner } from '../context/ScannerContext'
 import AiWidget from './AiWidget'
-
-const NAV = [
-  { to: '/dashboard',    icon: 'dashboard',      label: 'Dashboard' },
-  { to: '/analytics',    icon: 'bar_chart',      label: 'Analytics' },
-  { to: '/billing',      icon: 'point_of_sale',  label: 'New Sale' },
-  { to: '/products',     icon: 'inventory_2',    label: 'Products' },
-  { to: '/bundles',      icon: 'inventory',      label: 'Bundles' },
-  { to: '/suppliers',    icon: 'local_shipping', label: 'Suppliers' },
-  { to: '/expenses',     icon: 'receipt',        label: 'Expenses' },
-  { to: '/categories',   icon: 'category',       label: 'Categories' },
-  { to: '/customers',    icon: 'people',         label: 'Customers' },
-  { to: '/repairs',      icon: 'build',          label: 'Repairs' },
-  { to: '/notifications',icon: 'notifications',  label: 'Messages' },
-  { to: '/data',         icon: 'database',       label: 'Data & Backup' },
-]
+import ChangePassword from './ChangePassword'
+import { PAGES } from '../permissions'
 
 export default function Layout() {
   return (
@@ -29,7 +16,10 @@ export default function Layout() {
 }
 
 function LayoutInner() {
-  const { admin, logout } = useAuth()
+  const { user, isOwner, can, canOpen, logout } = useAuth()
+  const [changingPassword, setChangingPassword] = useState(false)
+  const [aiOpen, setAiOpen] = useState(false)
+  const nav = PAGES.filter(canOpen)
   const { theme, toggleTheme } = useTheme()
   const navigate = useNavigate()
   const { openScanner } = useScanner()
@@ -66,7 +56,7 @@ function LayoutInner() {
 
         {/* Nav */}
         <nav className="flex-1 px-2 py-4 space-y-0.5 overflow-y-auto overflow-hidden">
-          {NAV.map(n => (
+          {nav.map(n => (
             <NavLink key={n.to} to={n.to} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''} ${!sideOpen ? 'justify-center px-2' : ''}`}>
               <span className="material-symbols-outlined text-xl flex-shrink-0">{n.icon}</span>
               {sideOpen && <span>{n.label}</span>}
@@ -76,6 +66,10 @@ function LayoutInner() {
 
         {/* Bottom */}
         <div className="p-2 border-t border-white/5">
+          <button onClick={() => setChangingPassword(true)} className={`nav-item w-full ${!sideOpen ? 'justify-center px-2' : ''}`} title="Change password">
+            <span className="material-symbols-outlined text-xl">key</span>
+            {sideOpen && <span>Change Password</span>}
+          </button>
           <button onClick={logout} className={`nav-item w-full ${!sideOpen ? 'justify-center px-2' : ''}`}>
             <span className="material-symbols-outlined text-xl text-red-400">logout</span>
             {sideOpen && <span className="text-red-400">Logout</span>}
@@ -95,14 +89,32 @@ function LayoutInner() {
               <span className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-accent' : 'bg-red-400'}`} />
               {isOnline ? 'Online' : 'Offline'}
             </div>
-            <button onClick={toggleTheme} className="btn-ghost py-2 px-3 text-sm hidden md:flex">
+            {/* Scan and AI live in the header: floating corner buttons covered form fields (New Sale customer details). */}
+            {can('sales.create') && (
+              <button onClick={openScanner} className="btn-ghost py-2 px-3 text-sm" title="Scan a product QR code with the camera" aria-label="Scan product">
+                <span className="material-symbols-outlined text-sm">qr_code_scanner</span>
+                <span className="hidden lg:inline">Scan</span>
+              </button>
+            )}
+            {can('ai.use') && (
+              <button onClick={() => setAiOpen(v => !v)} className={`btn-ghost py-2 px-3 text-sm ${aiOpen ? 'border-brand/40 text-brand' : ''}`} title="AI assistant" aria-label="AI assistant" aria-expanded={aiOpen}>
+                <span className="material-symbols-outlined text-sm">smart_toy</span>
+                <span className="hidden lg:inline">AI</span>
+              </button>
+            )}
+            <button onClick={toggleTheme} className="btn-ghost py-2 px-3 text-sm" aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
               <span className="material-symbols-outlined text-sm">{theme === 'dark' ? 'light_mode' : 'dark_mode'}</span>
-              {theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
+              <span className="hidden md:inline">{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>
             </button>
-            <span className="text-white/30 text-sm font-mono hidden sm:block">{admin?.email}</span>
-            <button onClick={() => navigate('/billing')} className="btn-primary py-2 px-4 text-sm hidden sm:flex">
-              <span className="material-symbols-outlined text-sm">add</span> New Sale
-            </button>
+            <div className="hidden sm:flex items-center gap-2">
+              <span className="text-white/70 text-sm">{user?.displayName}</span>
+              <span className={`badge ${isOwner ? 'bg-brand/15 text-brand border-brand/30' : 'bg-white/5 text-white/60 border-white/10'}`}>{isOwner ? 'Owner' : 'Staff'}</span>
+            </div>
+            {can('sales.create') && (
+              <button onClick={() => navigate('/billing')} className="btn-primary py-2 px-4 text-sm hidden sm:flex">
+                <span className="material-symbols-outlined text-sm">add</span> New Sale
+              </button>
+            )}
           </div>
         </header>
 
@@ -113,17 +125,10 @@ function LayoutInner() {
       </div>
 
       {/* AI Widget */}
-      <AiWidget />
+      {can('ai.use') && <AiWidget open={aiOpen} onClose={() => setAiOpen(false)} />}
 
-      {/* Global QR Scanner FAB */}
-      <button
-        onClick={openScanner}
-        title="Scan to Add Product"
-        className="fixed bottom-6 right-6 z-40 flex items-center gap-2 px-4 py-3 bg-brand text-onbrand rounded-full shadow-lg hover:bg-brand/90 active:scale-95 transition-all font-mono text-sm font-bold"
-      >
-        <span className="material-symbols-outlined text-lg">qr_code_scanner</span>
-        <span className="hidden sm:inline">Scan Product</span>
-      </button>
+      {changingPassword && <ChangePassword onClose={() => setChangingPassword(false)} />}
+
     </div>
   )
 }

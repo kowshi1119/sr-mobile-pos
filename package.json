@@ -1,6 +1,6 @@
 {
   "name": "sr-mobile-pos",
-  "version": "1.0.0",
+  "version": "1.1.1",
   "private": true,
   "description": "Offline Windows POS for S R Mobile",
   "author": "S R Mobile",
@@ -14,7 +14,9 @@
     "desktop:dist": "npm run desktop:build",
     "test": "node --test mobile-shop-pos/desktop/test/*.test.js",
     "postinstall": "npm ci --prefix mobile-shop-pos/frontend",
-    "test:desktop": "electron mobile-shop-pos/desktop/test/electron-smoke.cjs"
+    "test:desktop": "electron mobile-shop-pos/desktop/test/electron-smoke.cjs",
+    "test:desktop:typing": "electron mobile-shop-pos/desktop/test/typing-qa.cjs",
+    "test:desktop:sales": "electron mobile-shop-pos/desktop/test/sales-qa.cjs"
   },
   "dependencies": {
     "@prisma/client": "5.22.0",
@@ -77,5 +79,11 @@
       "shortcutName": "SR Mobile POS",
       "deleteAppDataOnUninstall": false
     }
+  },
+  "allowScripts": {
+    "electron@44.4.3": true,
+    "prisma@5.22.0": true,
+    "@prisma/engines@5.22.0": true,
+    "electron-winstaller@5.4.0": true
   }
 }

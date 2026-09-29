@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import api from '../api/client'
+import { showAlert } from '../dialogs'
 
 export default function Categories() {
   const [cats, setCats] = useState([])
@@ -20,10 +21,13 @@ export default function Categories() {
       if (edit) await api.patch(`/categories/${edit.id}`, form)
       else await api.post('/categories', form)
       setShowForm(false); load()
-    } finally { setSaving(false) }
+    } catch (e) { showAlert(e.response?.data?.error || 'The category could not be saved.') } finally { setSaving(false) }
   }
 
-  const toggle = async (c) => { await api.patch(`/categories/${c.id}`, { isActive: !c.isActive }); load() }
+  const toggle = async (c) => {
+    try { await api.patch(`/categories/${c.id}`, { isActive: !c.isActive }); load() }
+    catch (e) { showAlert(e.response?.data?.error || 'The category could not be updated.') }
+  }
 
   return (
     <div className="relative z-10 space-y-5 max-w-3xl">

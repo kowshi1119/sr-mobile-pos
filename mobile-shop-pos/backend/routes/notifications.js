@@ -1,9 +1,11 @@
+const { sendError, badRequest } = require('../utils/errors');
+const { requirePermission } = require('../middleware/auth');
 const express = require('express');
 const router = express.Router();
 const { prisma } = require('../db');
 const auth = require('../middleware/auth');
 
-router.get('/', auth, async (req, res) => {
+router.get('/', requirePermission('notifications.view'), async (req, res) => {
   try {
     const notifications = await prisma.notification.findMany({
       include: { customer: { select: { name: true, phone: true } } },
@@ -11,7 +13,7 @@ router.get('/', auth, async (req, res) => {
       take: 100
     });
     res.json(notifications);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { sendError(res, err); }
 });
 
 // POST /api/notifications/webhook — Meta WhatsApp delivery status

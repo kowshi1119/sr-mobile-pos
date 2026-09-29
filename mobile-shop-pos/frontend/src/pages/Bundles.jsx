@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import api from '../api/client'
+import { showAlert } from '../dialogs'
 
 function Modal({ title, onClose, children }) {
   return (
@@ -50,7 +51,7 @@ export default function Bundles() {
   const saveBundle = async () => {
     const items = form.items.filter(i => i.productId)
     if (!form.name || !form.bundlePrice || items.length === 0) {
-      return alert('Name, price, and at least one product are required')
+      return showAlert('Name, price, and at least one product are required')
     }
     setSaving(true)
     try {
@@ -64,7 +65,7 @@ export default function Bundles() {
       setForm(emptyForm)
       load()
     } catch (e) {
-      alert(e.response?.data?.error || 'Failed to save bundle')
+      showAlert(e.response?.data?.error || 'Failed to save bundle')
     } finally {
       setSaving(false)
     }
@@ -75,7 +76,7 @@ export default function Bundles() {
       await api.patch(`/bundles/${bundle.id}`, { isActive: !bundle.isActive })
       load()
     } catch (e) {
-      alert(e.response?.data?.error || 'Failed to update bundle')
+      showAlert(e.response?.data?.error || 'Failed to update bundle')
     }
   }
 

@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { prisma } = require('../db');
 const auth = require('../middleware/auth');
+const { requirePermission } = auth;
 const fetch = require('node-fetch');
 
 const SYSTEM_PROMPT = `You are an admin assistant for S R Mobile, a mobile phone shop POS system in Chunnakam.
@@ -20,7 +21,7 @@ Examples:
 - "send invoice whatsapp" → {"intent":"send_whatsapp_invoice","action":"send_invoice","parameters":{}}
 - "dashboard" → {"intent":"navigate","action":"open_page","parameters":{"page":"dashboard"}}`;
 
-router.post('/chat', auth, async (req, res) => {
+router.post('/chat', requirePermission('ai.use'), async (req, res) => {
   try {
     const { query } = req.body;
     if (!query) return res.status(400).json({ error: 'Query required' });

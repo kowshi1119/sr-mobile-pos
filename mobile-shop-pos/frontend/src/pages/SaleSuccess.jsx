@@ -58,7 +58,7 @@ export default function SaleSuccess() {
         </div>
       </div>
 
-      <div className="print-receipt bg-white text-black rounded-xl overflow-hidden border border-white/5">
+      <div className="print-receipt bg-paper text-black rounded-xl overflow-hidden border border-white/5">
         <div className="p-8 text-center border-b border-gray-200">
           <h2 className="font-display font-black text-3xl tracking-widest text-brand">S R MOBILE</h2>
           <p className="text-gray-500 text-sm mt-1 tracking-wider">MOBILE SHOP — CHUNNAKAM</p>
@@ -92,7 +92,7 @@ export default function SaleSuccess() {
             </div>
             <div>
               <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-1">Served By</p>
-              <p className="text-gray-600 text-sm">Admin — Main Branch</p>
+              <p className="text-gray-600 text-sm">{sale.soldBy || 'S R Mobile'}</p>
             </div>
           </div>
         </div>
@@ -174,7 +174,7 @@ export default function SaleSuccess() {
 
         <div className="p-8 text-center border-t border-gray-200">
           {qrDataUrl && (
-            <div className="inline-block p-3 bg-white border-2 border-gray-200 rounded-xl mb-3">
+            <div className="inline-block p-3 bg-paper border-2 border-gray-200 rounded-xl mb-3">
               <img src={qrDataUrl} alt="Invoice QR" className="w-28 h-28"/>
             </div>
           )}

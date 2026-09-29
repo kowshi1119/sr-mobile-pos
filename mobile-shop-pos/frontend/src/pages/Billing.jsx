@@ -3,8 +3,11 @@ import { useNavigate } from 'react-router-dom'
 import api from '../api/client'
 import jsQR from 'jsqr'
 import { useScanner } from '../context/ScannerContext'
+import { useAuth } from '../context/AuthContext'
+import { showAlert } from '../dialogs'
 
 export default function Billing() {
+  const { can } = useAuth()
   const navigate = useNavigate()
   const [products, setProducts] = useState([])
   const [categories, setCategories] = useState([])
@@ -25,6 +28,9 @@ export default function Billing() {
   const [discount, setDiscount] = useState({ type: 'PERCENT', amount: 0 })
   const [loyaltyAccount, setLoyaltyAccount] = useState(null)
   const [redeemPoints, setRedeemPoints] = useState(0)
+  // What the user typed is kept as text, so entries like "0", "10." or "0.5" are not rewritten mid-typing.
+  const [discountText, setDiscountText] = useState('')
+  const [redeemText, setRedeemText] = useState('')
   const [showLoyalty, setShowLoyalty] = useState(false)
   const [bundles, setBundles] = useState([])
   const [showBundles, setShowBundles] = useState(false)
@@ -98,6 +104,7 @@ export default function Billing() {
         }
         return [...c, {
           key,
+          bundleId: bundle.id,
           product: item.product,
           variantId: null,
           imeiId: null,
@@ -140,7 +147,7 @@ export default function Billing() {
       const { data } = await api.get(`/products/${product.id}/imei`)
       const inStock = data.filter(i => i.status === 'IN_STOCK')
       if (inStock.length === 0) {
-        alert('No IMEI in stock for this product!')
+        showAlert('No IMEI in stock for this product!')
         return { added: false, reason: 'no_imei_stock' }
       }
       setAvailableImeis(inStock)
@@ -283,6 +290,9 @@ export default function Billing() {
         } else { animId = requestAnimationFrame(scan) }
       }
       animId = requestAnimationFrame(scan)
+    }).catch(() => {
+      setCameraOpen(false)
+      showAlert('No camera is available on this computer. Use a USB barcode scanner or type the product name in Search.', { title: 'Camera not available' })
     })
     return () => {
       cancelAnimationFrame(animId)
@@ -302,7 +312,7 @@ export default function Billing() {
     })
 
     if (!added) {
-      alert(`IMEI ${imei.imei} is already in the cart`)
+      showAlert(`IMEI ${imei.imei} is already in the cart`)
       return
     }
 
@@ -317,15 +327,20 @@ export default function Billing() {
     ).filter(i => i.quantity > 0))
   }
   const removeItem = key => setCart(c => c.filter(i => i.key !== key))
+  // Only users with the sales.changePrice permission see the price field (the server checks it too).
+  const setUnitPrice = (key, value) => setCart(c => c.map(i => i.key === key ? { ...i, unitPrice: value === '' ? '' : Math.max(0, Number(value)) } : i))
 
-  const subtotal = cart.reduce((s, i) => s + i.unitPrice * i.quantity, 0)
+  // Money on screen and sent to the server is rounded to cents: adding 0.10 three times in floating point
+  // gives 0.30000000000000004, which the server rightly rejects (credit sales with decimal prices failed).
+  const cents = n => Math.round((n + Number.EPSILON) * 100) / 100
+  const subtotal = cents(cart.reduce((s, i) => s + (Number(i.unitPrice) || 0) * i.quantity, 0))
   const loyaltyDiscount = redeemPoints || 0
-  const discountValue = (discount.amount > 0
+  const discountValue = cents((discount.amount > 0
     ? discount.type === 'PERCENT'
-      ? Math.round(subtotal * discount.amount / 100)
+      ? Math.round(subtotal * Math.min(discount.amount, 100) / 100)
       : Math.min(discount.amount, subtotal)
-    : 0) + loyaltyDiscount
-  const total = Math.max(0, subtotal - discountValue)
+    : 0) + loyaltyDiscount)
+  const total = cents(Math.max(0, subtotal - discountValue))
 
   // Keep creditAmount in sync with total when credit sale is on
   useEffect(() => {
@@ -333,19 +348,22 @@ export default function Billing() {
   }, [total, creditSale])
 
   const completeSale = async () => {
-    if (cart.length === 0) { alert('Cart is empty'); return }
+    if (cart.length === 0) { showAlert('Cart is empty'); return }
+    if (cart.some(i => i.unitPrice === '' || !Number.isFinite(Number(i.unitPrice)))) { showAlert('Enter a price for every item.'); return }
     setSubmitting(true)
     try {
       const { data } = await api.post('/sales', {
         customer,
         paymentMethod,
-        creditAmount: creditSale ? parseFloat(creditAmount) || 0 : 0,
+        creditAmount: creditSale ? cents(parseFloat(creditAmount) || 0) : 0,
         discountAmount: Number(discountValue.toFixed(2)),
         discountType: discount.type === 'PERCENT' ? `${discount.amount}%` : (redeemPoints > 0 ? `FIXED + ${redeemPoints}pts` : 'FIXED'),
+        loyaltyPoints: redeemPoints || 0,
         items: cart.map(i => ({
           productId: i.product.id,
           variantId: i.variantId || null,
           imeiId: i.imeiId || null,
+          bundleId: i.bundleId || null,
           quantity: i.quantity,
           unitPrice: Number(Number(i.unitPrice).toFixed(2))
         }))
@@ -360,13 +378,13 @@ export default function Billing() {
         } catch (_) {}
       }
 
-      setDiscount({ type: 'PERCENT', amount: 0 })
+      setDiscount({ type: 'PERCENT', amount: 0 }); setDiscountText('')
       setShowDiscount(false)
       setLoyaltyAccount(null)
-      setRedeemPoints(0)
+      setRedeemPoints(0); setRedeemText('')
       setShowLoyalty(false)
-      navigate('/sale-success', { state: { sale: data.sale, invoiceNumber: data.invoiceNumber, qrDataUrl: data.qrDataUrl } })
-    } catch (e) { alert(e.response?.data?.error || 'Sale failed'); setSubmitting(false) }
+      navigate('/sale-success', { state: { sale: data.sale, invoiceNumber: data.invoiceNumber, qrDataUrl: data.qrDataUrl, integrationNotice: data.integrationNotice } })
+    } catch (e) { showAlert(e.response?.data?.error || 'Sale failed'); setSubmitting(false) }
   }
 
   const handlePhoneChange = async (value) => {
@@ -384,13 +402,13 @@ export default function Billing() {
           }))
         } else {
           setLoyaltyAccount(null)
-          setRedeemPoints(0)
+          setRedeemPoints(0); setRedeemText('')
           setShowLoyalty(false)
         }
       } catch (_) {}
     } else {
       setLoyaltyAccount(null)
-      setRedeemPoints(0)
+      setRedeemPoints(0); setRedeemText('')
       setShowLoyalty(false)
     }
   }
@@ -552,8 +570,14 @@ export default function Billing() {
                   <span className="w-8 text-center text-white text-sm font-mono">{item.quantity}</span>
                   <button onClick={() => updateQty(item.key, 1)} className="w-6 h-6 rounded bg-surface-high text-white/50 hover:text-white flex items-center justify-center text-sm">+</button>
                 </div>
-                <p className="font-display font-bold text-white text-sm">LKR {(item.unitPrice * item.quantity).toLocaleString()}</p>
+                <p className="font-display font-bold text-white text-sm">LKR {((Number(item.unitPrice) || 0) * item.quantity).toLocaleString()}</p>
               </div>
+              {can('sales.changePrice') && !item.bundleId && (
+                <label className="flex items-center gap-2 text-white/60 text-xs">
+                  Unit price
+                  <input type="number" min="0" step="0.01" inputMode="decimal" aria-label={`Unit price for ${item.product.name}`} className="input py-1 px-2 text-xs w-28" value={item.unitPrice} onChange={e => setUnitPrice(item.key, e.target.value)} />
+                </label>
+              )}
               {!item.product.hasImei && item.quantity >= item.product.stockQuantity && (
                 <p className="text-red-400 text-xs font-mono mt-1 flex items-center gap-1">
                   <span className="material-symbols-outlined text-xs">warning</span>
@@ -595,7 +619,7 @@ export default function Billing() {
         </div>
 
         {/* Discount — collapsed by default */}
-        <div className="mb-4">
+        {can('sales.discount') && <div className="mb-4">
           {!showDiscount ? (
             // Collapsed state — just a small link button
             <button
@@ -621,7 +645,7 @@ export default function Billing() {
                   type="button"
                   onClick={() => {
                     setShowDiscount(false)
-                    setDiscount({ type: 'PERCENT', amount: 0 })
+                    setDiscount({ type: 'PERCENT', amount: 0 }); setDiscountText('')
                   }}
                   className="text-white/30 hover:text-red-400 transition-colors text-xs font-mono flex items-center gap-1">
                   <span className="material-symbols-outlined text-sm">
@@ -666,12 +690,15 @@ export default function Billing() {
                   max={discount.type === 'PERCENT' ? 100 : subtotal}
                   className="input text-sm py-2 flex-1"
                   placeholder={discount.type === 'PERCENT' ? 'e.g. 10' : 'e.g. 500'}
-                  value={discount.amount || ''}
+                  inputMode="decimal"
+                  value={discountText}
                   onChange={e => {
-                    const val = parseFloat(e.target.value) || 0
+                    setDiscountText(e.target.value)
+                    const val = parseFloat(e.target.value)
                     const max = discount.type === 'PERCENT' ? 100 : subtotal
-                    setDiscount(d => ({ ...d, amount: Math.min(val, max) }))
+                    setDiscount(d => ({ ...d, amount: Number.isFinite(val) && val > 0 ? Math.min(val, max) : 0 }))
                   }}
+                  onBlur={() => setDiscountText(discount.amount ? String(discount.amount) : '')}
                 />
               </div>
 
@@ -688,9 +715,9 @@ export default function Billing() {
               )}
             </div>
           )}
-        </div>
+        </div>}
 
-        {loyaltyAccount && loyaltyAccount.points > 0 && (
+        {loyaltyAccount && loyaltyAccount.points > 0 && can('loyalty.manage', 'sales.discount') && (
           <div className="border border-accent/20 rounded-xl p-4 bg-accent/5 space-y-2 animate-fade-in mb-4">
             <div className="flex items-center justify-between">
               <p className="text-accent text-sm font-body flex items-center gap-1.5">
@@ -715,15 +742,18 @@ export default function Billing() {
                     max={loyaltyAccount.points}
                     className="input text-sm py-1.5 flex-1"
                     placeholder="Points to redeem"
-                    value={redeemPoints || ''}
+                    step="1"
+                    inputMode="numeric"
+                    value={redeemText}
                     onChange={e => {
-                      const v = Math.min(parseInt(e.target.value) || 0, loyaltyAccount.points)
-                      setRedeemPoints(v)
+                      setRedeemText(e.target.value)
+                      setRedeemPoints(Math.max(0, Math.min(parseInt(e.target.value, 10) || 0, loyaltyAccount.points)))
                     }}
+                    onBlur={() => setRedeemText(redeemPoints ? String(redeemPoints) : '')}
                   />
                   <button type="button"
                     onClick={() => {
-                      setRedeemPoints(0)
+                      setRedeemPoints(0); setRedeemText('')
                       setShowLoyalty(false)
                     }}
                     className="text-white/30 hover:text-red-400 text-xs font-mono">
@@ -785,7 +815,7 @@ export default function Billing() {
             <canvas ref={canvasRef} className="hidden"/>
             <div className="absolute inset-0 border-2 border-brand/60 rounded-2xl"/>
             <p className="text-white/60 text-sm text-center mt-3 font-mono">Point at QR code</p>
-            <button onClick={() => setCameraOpen(false)} className="absolute top-2 right-2 w-8 h-8 bg-black/50 rounded-full flex items-center justify-center text-white">
+            <button onClick={() => setCameraOpen(false)} className="absolute top-2 right-2 w-8 h-8 bg-black/50 rounded-full flex items-center justify-center text-paper">
               <span className="material-symbols-outlined text-sm">close</span>
             </button>
           </div>

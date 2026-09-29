@@ -1,8 +1,10 @@
+const { sendError, badRequest } = require('../utils/errors');
+const { requirePermission } = require('../middleware/auth');
 const router = require('express').Router()
 const { prisma } = require('../db');
 const auth = require('../middleware/auth')
 
-router.get('/', auth, async (req, res) => {
+router.get('/', requirePermission('targets.manage', 'dashboard.view', 'expenses.manage'), async (req, res) => {
   try {
     const year = parseInt(req.query.year) || new Date().getFullYear()
     const month = parseInt(req.query.month) || (new Date().getMonth() + 1)
@@ -27,11 +29,11 @@ router.get('/', auth, async (req, res) => {
       hasTarget: !!target
     })
   } catch (e) {
-    res.status(500).json({ error: e.message })
+    sendError(res, e)
   }
 })
 
-router.post('/', auth, async (req, res) => {
+router.post('/', requirePermission('targets.manage'), async (req, res) => {
   try {
     const { year, month, targetAmount, notes } = req.body
     if (!year || !month || !targetAmount) {
@@ -52,7 +54,7 @@ router.post('/', auth, async (req, res) => {
     })
     res.json(target)
   } catch (e) {
-    res.status(500).json({ error: e.message })
+    sendError(res, e)
   }
 })
 

@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import api from '../api/client'
+import { useAuth } from '../context/AuthContext'
+import { showAlert, askConfirm } from '../dialogs'
 
 const CATEGORY_COLORS = {
   Rent: '#E8A020',
@@ -28,6 +30,7 @@ function Modal({ title, onClose, children }) {
 }
 
 export default function Expenses() {
+  const { can } = useAuth()
   const [expenses, setExpenses] = useState([])
   const [total, setTotal] = useState(0)
   const [monthly, setMonthly] = useState([])
@@ -89,36 +92,36 @@ export default function Expenses() {
   }, [expenses])
 
   const addExpense = async () => {
-    if (!form.category || !form.amount) return alert('Category and amount are required')
+    if (!form.category || !form.amount) return showAlert('Category and amount are required')
     try {
       await api.post('/expenses', form)
       setShowModal(false)
       setForm({ category: 'Rent', description: '', amount: '', date: new Date().toISOString().slice(0, 10) })
       load()
     } catch (e) {
-      alert(e.response?.data?.error || 'Failed to add expense')
+      showAlert(e.response?.data?.error || 'Failed to add expense')
     }
   }
 
   const deleteExpense = async id => {
-    if (!window.confirm('Delete this expense?')) return
+    if (!await askConfirm('Delete this expense?')) return
     try {
       await api.delete(`/expenses/${id}`)
       load()
     } catch (e) {
-      alert(e.response?.data?.error || 'Delete failed')
+      showAlert(e.response?.data?.error || 'Delete failed')
     }
   }
 
   const saveTarget = async () => {
-    if (!targetForm.amount) return alert('Enter a target amount')
+    if (!targetForm.amount) return showAlert('Enter a target amount')
     await api.post('/targets', {
       year: currentYear,
       month: currentMonth,
       targetAmount: parseFloat(targetForm.amount),
       notes: targetForm.notes
     })
-    alert('Target saved!')
+    showAlert('Target saved!')
     setTargetForm({ amount: '', notes: '' })
     load()
   }
@@ -164,7 +167,7 @@ export default function Expenses() {
           </div>
         </div>
 
-        <div className="card p-4 border-brand/20 bg-brand/5 space-y-3">
+        {can('targets.manage') && <div className="card p-4 border-brand/20 bg-brand/5 space-y-3">
           <div className="flex items-center justify-between">
             <div>
               <h3 className="font-display font-bold text-white">Set Monthly Target</h3>
@@ -180,7 +183,7 @@ export default function Expenses() {
             <span className="material-symbols-outlined text-sm">flag</span>
             Save Target
           </button>
-        </div>
+        </div>}
       </div>
 
       <div className="card overflow-hidden">
